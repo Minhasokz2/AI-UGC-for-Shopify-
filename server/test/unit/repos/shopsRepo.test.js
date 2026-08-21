@@ -31,10 +31,10 @@ describe('repos/shopsRepo', () => {
       expect(shop.lifetimeImagesGenerated).toBe(0);
       expect(shop.uninstalledAt).toBeNull();
       expect(shop.firstJobCreatedAt).toBeNull();
-      expect(shop.installedAt).toBeInstanceOf(FakeTimestamp);
 
       const stored = (await db.collection('shops').doc('shop-a.myshopify.com').get()).data();
       expect(stored.creditBalance).toBe(0);
+      expect(stored.installedAt).toBeInstanceOf(FakeTimestamp);
     });
 
     it('is idempotent: a second call returns the existing doc without resetting mutated fields', async () => {

@@ -8,6 +8,7 @@ const {
   IdempotencyConflictError,
   PublishError,
   ShopifyApiError,
+  ProviderApiError,
   LostLeaseError,
 } = require('../../../src/errors/AppError');
 
@@ -51,6 +52,14 @@ describe('errors/AppError', () => {
   it('ShopifyApiError defaults to 502 but accepts an override', () => {
     expect(new ShopifyApiError('x').statusCode).toBe(502);
     expect(new ShopifyApiError('x', { status: 401 }).statusCode).toBe(401);
+  });
+
+  it('ProviderApiError defaults to 502, accepts a status override, and carries the provider name', () => {
+    expect(new ProviderApiError('x').statusCode).toBe(502);
+    const err = new ProviderApiError('resend failed', { provider: 'resend', status: 400 });
+    expect(err.statusCode).toBe(400);
+    expect(err.provider).toBe('resend');
+    expect(err.code).toBe('PROVIDER_API_ERROR');
   });
 
   it('LostLeaseError is marked non-exposable (never HTTP-facing)', () => {

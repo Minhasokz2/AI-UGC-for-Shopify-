@@ -10,7 +10,7 @@ function makeRepo() {
 describe('repos/batchesRepo', () => {
   describe('createBatch', () => {
     it('creates a pending batch with zeroed counters', async () => {
-      const { repo } = makeRepo();
+      const { db, repo } = makeRepo();
       const batch = await repo.createBatch({ shopDomain: 'shop-a', totalCount: 3, contentType: 'scene' });
 
       expect(batch.id).toBeTruthy();
@@ -20,7 +20,9 @@ describe('repos/batchesRepo', () => {
       expect(batch.failedCount).toBe(0);
       expect(batch.status).toBe('pending');
       expect(batch.contentType).toBe('scene');
-      expect(batch.createdAt).toBeInstanceOf(FakeTimestamp);
+
+      const stored = (await db.collection('batches').doc(batch.id).get()).data();
+      expect(stored.createdAt).toBeInstanceOf(FakeTimestamp);
     });
   });
 
@@ -34,7 +36,16 @@ describe('repos/batchesRepo', () => {
       const { repo } = makeRepo();
       const created = await repo.createBatch({ shopDomain: 'shop-a', totalCount: 2, contentType: 'scene' });
       const fetched = await repo.getBatch(created.id);
-      expect(fetched).toEqual(created);
+      expect(fetched).toMatchObject({
+        id: created.id,
+        shopDomain: 'shop-a',
+        totalCount: 2,
+        succeededCount: 0,
+        failedCount: 0,
+        status: 'pending',
+        contentType: 'scene',
+      });
+      expect(fetched.createdAt).toBeInstanceOf(FakeTimestamp);
     });
   });
 

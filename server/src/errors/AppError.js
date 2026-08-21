@@ -89,6 +89,25 @@ class ShopifyApiError extends AppError {
 }
 
 /**
+ * Generic upstream-provider failure for the external-API-client layer
+ * (services/emailService.js, services/brandStyle.js, etc.) — used only where a
+ * provider's SDK reports failure through its *return value* rather than by
+ * throwing (Resend's `{data, error}` shape) or where the provider's response
+ * doesn't match the contract we depend on (an LLM's freeform text failing to
+ * parse as the JSON we asked for). Native SDK exceptions (fal.ai's ApiError,
+ * WaveSpeed's WavespeedException hierarchy, etc.) are left to propagate
+ * unwrapped — this class exists only to give the two non-throwing failure modes
+ * above a consistent, HTTP-status-bearing shape, tagged with which provider
+ * failed since this one error class spans several unrelated external services.
+ */
+class ProviderApiError extends AppError {
+  constructor(message, { provider, status = 502 } = {}) {
+    super(message, status, { code: 'PROVIDER_API_ERROR' });
+    this.provider = provider;
+  }
+}
+
+/**
  * Thrown internally by jobsRepo/leaseClaim when a worker discovers it no longer
  * owns a job's lease (it was reclaimed after going stale). Never HTTP-facing —
  * jobWorker.js catches this and aborts the current run silently rather than
@@ -113,5 +132,6 @@ module.exports = {
   IdempotencyConflictError,
   PublishError,
   ShopifyApiError,
+  ProviderApiError,
   LostLeaseError,
 };
