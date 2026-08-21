@@ -1,0 +1,42 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "REPLACE_WITH_SHOPIFY_API_KEY"
+name = "MotionArt"
+handle = "motionart"
+application_url = "https://REPLACE_WITH_YOUR_RENDER_URL.onrender.com"
+embedded = true
+
+[access_scopes]
+# Shopify-managed installation: scopes are declared here and granted at install time.
+# The server does NOT pass a `scopes` array into shopifyApp()'s config — see
+# server/src/config/shopify.js.
+scopes = "read_products,write_products"
+use_legacy_install_flow = false
+
+[auth]
+# Kept for Partner Dashboard/CLI validation. The server uses token exchange
+# (future.tokenExchange) for embedded auth, so this callback path is not actually
+# hit in normal operation.
+redirect_urls = [ "https://REPLACE_WITH_YOUR_RENDER_URL.onrender.com/api/auth/callback" ]
+
+[webhooks]
+api_version = "2025-07"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/api/webhooks"
+
+  [[webhooks.subscriptions]]
+  topics = [ "shop/redact" ]
+  uri = "/api/webhooks"
+
+  [[webhooks.subscriptions]]
+  topics = [ "customers/redact" ]
+  uri = "/api/webhooks"
+
+  [[webhooks.subscriptions]]
+  topics = [ "customers/data_request" ]
+  uri = "/api/webhooks"
+
+[pos]
+embedded = false

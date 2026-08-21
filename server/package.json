@@ -1,0 +1,40 @@
+{
+  "name": "server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "@fal-ai/client": "^1.2.0",
+    "@sentry/node": "^8.42.0",
+    "@shopify/shopify-api": "^14.0.0",
+    "@shopify/shopify-app-express": "^8.0.0",
+    "@shopify/shopify-app-session-storage": "^6.0.0",
+    "cloudinary": "^2.5.1",
+    "dotenv": "^16.4.5",
+    "express": "^5.0.0",
+    "firebase-admin": "^12.7.0",
+    "google-auth-library": "^9.15.0",
+    "openai": "^4.73.0",
+    "p-limit": "^3.1.0",
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0",
+    "resend": "^4.0.1",
+    "wavespeed": "^0.2.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "eslint": "^9.15.0",
+    "nock": "^13.5.6",
+    "supertest": "^7.0.0",
+    "vitest": "^2.1.5"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "motionart",
+  "private": true,
+  "version": "1.0.0",
+  "description": "MotionArt — AI product photography, UGC, and video generation for Shopify",
+  "workspaces": [
+    "server",
+    "web",
+    "admin",
+    "marketing"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "dev:marketing": "npm run dev -w marketing",
+    "dev:admin": "npm run dev -w admin",
+    "build": "npm run build -w web && npm run build -w marketing && npm run build -w admin",
+    "test": "npm run test -w server && npm run test -w web --if-present",
+    "seed:templates": "node scripts/seedTemplates.js",
+    "seed:models": "node scripts/seedAllowedModels.js",
+    "sweep:nurture": "node scripts/sweepNurture.js",
+    "sweep:billing": "node scripts/sweepBillingReconciliation.js",
+    "lint": "npm run lint -ws --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
