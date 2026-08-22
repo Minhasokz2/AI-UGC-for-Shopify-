@@ -15,7 +15,7 @@
     "dev:marketing": "npm run dev -w marketing",
     "dev:admin": "npm run dev -w admin",
     "build": "npm run build -w web && npm run build -w marketing && npm run build -w admin",
-    "test": "npm run test -w server && npm run test -w web --if-present",
+    "test": "npm run test -w server && npm run test -w web --if-present && npm run test -w admin --if-present && npm run test -w marketing --if-present",
     "seed:templates": "node scripts/seedTemplates.js",
     "seed:models": "node scripts/seedAllowedModels.js",
     "sweep:nurture": "node scripts/sweepNurture.js",
