@@ -2,7 +2,7 @@
 
 client_id = "96a0b97fa5f49fb98e8bb6e0778cd58d"
 name = "AI UGC Generator"
-handle = "motionart"
+handle = "ai-ugc-gen-96a0b97f"
 application_url = "https://motionart.onrender.com"
 embedded = true
 
