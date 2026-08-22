@@ -81,6 +81,18 @@ class QuotaExceededError extends AppError {
   }
 }
 
+/**
+ * Thrown by middleware/rateLimiter.js's HTTP burst guard (~100 req/min/shop).
+ * Distinct from ConcurrencyLimitError, which is reserved for the business-rule
+ * cap on simultaneously in-flight generation jobs per shop — a different limit
+ * enforced at a different layer (the job-creation route, via p-limit).
+ */
+class RateLimitError extends AppError {
+  constructor(message = 'Too many requests — please slow down.') {
+    super(message, 429, { code: 'RATE_LIMITED' });
+  }
+}
+
 class IdempotencyConflictError extends AppError {
   constructor(message = 'An identical request is already in flight.') {
     super(message, 409, { code: 'IDEMPOTENCY_CONFLICT' });
@@ -142,6 +154,7 @@ module.exports = {
   NoApprovedVariationsError,
   ConcurrencyLimitError,
   QuotaExceededError,
+  RateLimitError,
   IdempotencyConflictError,
   PublishError,
   ShopifyApiError,

@@ -6,6 +6,7 @@ const {
   NoApprovedVariationsError,
   ConcurrencyLimitError,
   QuotaExceededError,
+  RateLimitError,
   IdempotencyConflictError,
   PublishError,
   ShopifyApiError,
@@ -45,6 +46,12 @@ describe('errors/AppError', () => {
     expect(err.statusCode).toBe(429);
     expect(err.code).toBe('QUOTA_EXCEEDED');
     expect(err.message).toBe('Daily quota reached');
+  });
+
+  it('RateLimitError is 429 and distinct from QuotaExceededError/ConcurrencyLimitError codes', () => {
+    const err = new RateLimitError();
+    expect(err.statusCode).toBe(429);
+    expect(err.code).toBe('RATE_LIMITED');
   });
 
   it('IdempotencyConflictError is 409', () => {
