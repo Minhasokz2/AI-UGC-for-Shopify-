@@ -29,16 +29,12 @@ api_version = "2026-07"
   topics = [ "app/uninstalled" ]
   uri = "/api/webhooks"
 
+  # The three mandatory GDPR/compliance topics can't be declared via `topics` in
+  # current API versions — `shopify app deploy` rejects them there with "invalid
+  # topic" (confirmed live against 2026-07). They must use `compliance_topics`
+  # instead, on their own subscription block.
   [[webhooks.subscriptions]]
-  topics = [ "shop/redact" ]
-  uri = "/api/webhooks"
-
-  [[webhooks.subscriptions]]
-  topics = [ "customers/redact" ]
-  uri = "/api/webhooks"
-
-  [[webhooks.subscriptions]]
-  topics = [ "customers/data_request" ]
+  compliance_topics = [ "shop/redact", "customers/redact", "customers/data_request" ]
   uri = "/api/webhooks"
 
 [pos]
