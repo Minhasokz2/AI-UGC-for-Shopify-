@@ -47,7 +47,7 @@ const APP_PURCHASE_ONE_TIME_CREATE_MUTATION = `#graphql
 function buildSubscriptionInput(pack, period, { returnUrl, test }) {
   const priceCents = period === 'annual' ? pack.annualPriceCents : pack.monthlyPriceCents;
   return {
-    name: `MotionArt ${pack.label} (${period === 'annual' ? 'Annual' : 'Monthly'})`,
+    name: `AI UGC Generator ${pack.label} (${period === 'annual' ? 'Annual' : 'Monthly'})`,
     returnUrl,
     test,
     lineItems: [
@@ -66,7 +66,7 @@ function buildSubscriptionInput(pack, period, { returnUrl, test }) {
 /** @param {{ returnUrl: string, test: boolean }} opts */
 function buildUnlimitedSubscriptionInput({ returnUrl, test }) {
   return {
-    name: `MotionArt ${UNLIMITED_PLAN.label}`,
+    name: `AI UGC Generator ${UNLIMITED_PLAN.label}`,
     returnUrl,
     test,
     lineItems: [
@@ -85,7 +85,7 @@ function buildUnlimitedSubscriptionInput({ returnUrl, test }) {
 /** @param {{ amountCents: number, returnUrl: string, test: boolean }} opts */
 function buildOneTimePurchaseInput({ amountCents, returnUrl, test }) {
   return {
-    name: `MotionArt custom credit top-up ($${(amountCents / 100).toFixed(2)})`,
+    name: `AI UGC Generator custom credit top-up ($${(amountCents / 100).toFixed(2)})`,
     price: { amount: (amountCents / 100).toFixed(2), currencyCode: 'USD' },
     returnUrl,
     test,

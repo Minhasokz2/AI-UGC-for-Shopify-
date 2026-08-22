@@ -51,7 +51,7 @@ function Login() {
             <BlockStack gap="400">
               <BlockStack gap="100">
                 <Text as="h1" variant="headingLg">
-                  MotionArt Admin
+                  AI UGC Generator Admin
                 </Text>
                 <Text as="p" tone="subdued">
                   Enter the admin API key to manage the shared template and model catalog.

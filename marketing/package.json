@@ -2,7 +2,7 @@
   "name": "marketing",
   "private": true,
   "version": "1.0.0",
-  "description": "MotionArt public marketing site (home, pricing, install CTA)",
+  "description": "AI UGC Generator public marketing site (home, pricing, install CTA)",
   "type": "module",
   "scripts": {
     "dev": "vite",

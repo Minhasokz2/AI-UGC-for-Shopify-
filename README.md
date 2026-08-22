@@ -1,6 +1,6 @@
-# MotionArt
+# AI UGC Generator
 
-MotionArt is a Shopify embedded app that generates AI product photography, UGC-style on-model
+AI UGC Generator is a Shopify embedded app that generates AI product photography, UGC-style on-model
 lifestyle images, and short product videos from a merchant's existing catalog images. It uses a
 two-step pipeline (background removal → routed AI model) designed to preserve exact product
 color, logo, label text, shape, and proportions.
@@ -91,7 +91,7 @@ business logic is verified against mocked SDKs / an in-memory fake Firestore. Be
    it defaults to a same-origin relative fetch, which only works if marketing/ is deliberately
    served from behind the same domain/proxy as the API.
 6. **Shopify App Store listing URL**: `marketing/src/pages/Install.jsx` links to a placeholder
-   (`https://apps.shopify.com/motionart`) — replace it once MotionArt has a real listing.
+   (`https://apps.shopify.com/motionart`) — replace it once AI UGC Generator has a real listing.
 7. **`@shopify/polaris` (React) is deprecated** — `npm install` prints this warning. `web/` and
    `admin/` were built against it since it's still the current, functional, documented way to get
    Shopify-styled React components as of this build; Shopify's replacement (Polaris web

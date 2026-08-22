@@ -7,7 +7,7 @@ export function WelcomeCard() {
     <Card>
       <BlockStack gap="300">
         <Text as="h2" variant="headingMd">
-          Welcome to MotionArt
+          Welcome to AI UGC Generator
         </Text>
         <Text as="p" tone="subdued">
           Generate AI product photography, UGC-style on-model images, and short product videos

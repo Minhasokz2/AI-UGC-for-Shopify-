@@ -7,7 +7,7 @@ const TEMPLATES_COLLECTION = 'templates';
  * project rather than provisioning a new one). That other app's documents
  * use an incompatible shape (`preferredModel`/`promptTemplate`/`name` instead
  * of `modelRole`/`prompt`/`label`) and must never surface here — every
- * MotionArt template has `modelRole` (generationPipeline.resolveModelForJob
+ * AI UGC Generator template has `modelRole` (generationPipeline.resolveModelForJob
  * requires it to route a job to an actual model), so its absence reliably
  * marks a document as belonging to the other app.
  */

@@ -59,7 +59,7 @@ describe('integration: /api/billing', () => {
     const growth = CREDIT_PACKS.find((p) => p.id === 'growth');
     const shopify = createFakeShopify({
       graphqlHandler: async () => ({
-        data: { node: { id: 'gid://shopify/AppSubscription/1', name: `MotionArt ${growth.label} (Monthly)`, status: 'ACTIVE' } },
+        data: { node: { id: 'gid://shopify/AppSubscription/1', name: `AI UGC Generator ${growth.label} (Monthly)`, status: 'ACTIVE' } },
       }),
     });
     const { app, db } = buildTestApp({ shopify });
@@ -79,7 +79,7 @@ describe('integration: /api/billing', () => {
   it('POST /confirm activates the Unlimited plan', async () => {
     const shopify = createFakeShopify({
       graphqlHandler: async () => ({
-        data: { node: { id: 'gid://shopify/AppSubscription/2', name: `MotionArt ${UNLIMITED_PLAN.label}`, status: 'ACTIVE' } },
+        data: { node: { id: 'gid://shopify/AppSubscription/2', name: `AI UGC Generator ${UNLIMITED_PLAN.label}`, status: 'ACTIVE' } },
       }),
     });
     const { app, db } = buildTestApp({ shopify });
@@ -95,7 +95,7 @@ describe('integration: /api/billing', () => {
 
   it('POST /confirm reports confirmed:false for a charge that is not yet ACTIVE', async () => {
     const shopify = createFakeShopify({
-      graphqlHandler: async () => ({ data: { node: { id: 'gid://shopify/AppSubscription/3', name: 'MotionArt Growth (Monthly)', status: 'PENDING' } } }),
+      graphqlHandler: async () => ({ data: { node: { id: 'gid://shopify/AppSubscription/3', name: 'AI UGC Generator Growth (Monthly)', status: 'PENDING' } } }),
     });
     const { app, db } = buildTestApp({ shopify });
     await db.collection('shops').doc(SHOP).set({ shopDomain: SHOP });

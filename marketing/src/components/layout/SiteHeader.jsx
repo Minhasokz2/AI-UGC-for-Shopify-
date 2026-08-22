@@ -5,7 +5,7 @@ export default function SiteHeader() {
     <header className="site-header">
       <div className="site-header__inner">
         <Link to="/" className="site-header__brand">
-          MotionArt
+          AI UGC Generator
         </Link>
         <nav className="site-header__nav">
           <Link to="/pricing">Pricing</Link>

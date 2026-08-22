@@ -39,7 +39,7 @@ async function main() {
 
   const app = createApp(deps);
   const server = app.listen(env.PORT, () => {
-    logger.info({ port: env.PORT, workerId }, 'MotionArt server listening');
+    logger.info({ port: env.PORT, workerId }, 'AI UGC Generator server listening');
   });
 
   const shutdown = (signal) => {

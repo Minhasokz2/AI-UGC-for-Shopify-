@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "571cb8440f887141962852ea77de71f0"
-name = "MotionArt"
+name = "AI UGC Generator"
 handle = "motionart"
 application_url = "https://motionart.onrender.com"
 embedded = true

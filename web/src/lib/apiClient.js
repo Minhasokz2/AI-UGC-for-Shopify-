@@ -1,5 +1,5 @@
 /**
- * Thin fetch wrapper for the MotionArt backend.
+ * Thin fetch wrapper for the AI UGC Generator backend.
  *
  * Auth: App Bridge's own `fetch` interceptor auto-attaches the session
  * token to same-origin requests once the App Bridge script tag has

@@ -2,7 +2,7 @@
   "name": "motionart",
   "private": true,
   "version": "1.0.0",
-  "description": "MotionArt — AI product photography, UGC, and video generation for Shopify",
+  "description": "AI UGC Generator — AI product photography, UGC, and video generation for Shopify",
   "workspaces": [
     "server",
     "web",

@@ -103,7 +103,7 @@ function createBillingReconciliation({ shopsRepo, billingService, getGraphqlClie
 
 /**
  * Maps a subscription's display name (as billingService.js constructs it —
- * e.g. "MotionArt Growth (Monthly)") back to its monthly credit grant. Pure
+ * e.g. "AI UGC Generator Growth (Monthly)") back to its monthly credit grant. Pure
  * and exported so container.js can build the production billingReconciliation
  * instance with the exact same mapping this file's own singleton uses.
  * @param {string} subscriptionName

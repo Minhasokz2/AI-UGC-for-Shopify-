@@ -38,7 +38,7 @@ function ProtectedShell() {
   const navigationMarkup = (
     <Navigation location={location.pathname}>
       <Navigation.Section
-        title="MotionArt Admin"
+        title="AI UGC Generator Admin"
         items={[
           { url: '/templates', label: 'Templates', selected: isSelected('/templates') },
           { url: '/models', label: 'Models', selected: isSelected('/models') },
@@ -53,7 +53,7 @@ function ProtectedShell() {
     <TopBar.UserMenu
       actions={[{ items: [{ content: 'Sign out', onAction: handleSignOut }] }]}
       name="Admin"
-      detail="MotionArt"
+      detail="AI UGC Generator"
       initials="A"
       open={userMenuOpen}
       onToggle={toggleUserMenu}

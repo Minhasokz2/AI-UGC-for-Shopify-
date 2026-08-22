@@ -1,5 +1,5 @@
 /**
- * Thin fetch wrapper for the MotionArt backend's /admin/api/* surface.
+ * Thin fetch wrapper for the AI UGC Generator backend's /admin/api/* surface.
  *
  * Auth: there is no session/cookie auth here (this SPA is not
  * Shopify-embedded and has no merchant identity) — every request carries a

@@ -5,7 +5,7 @@ const ALLOWED_MODELS_COLLECTION = 'allowed_models';
  * separately-running app in the same Firebase project (kept intentionally —
  * see the operator's explicit instruction to reuse this exact Firestore
  * project rather than provisioning a new one). That other app's documents
- * have no `role` field at all, while every MotionArt model doc does
+ * have no `role` field at all, while every AI UGC Generator model doc does
  * (modelRouter.js and generationPipeline.js both resolve a model by its
  * `role`) — so its absence reliably marks a document as belonging to the
  * other app.

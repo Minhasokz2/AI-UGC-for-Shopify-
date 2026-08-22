@@ -2,7 +2,7 @@
   "name": "admin",
   "private": true,
   "version": "1.0.0",
-  "description": "MotionArt internal admin panel — standalone (non-embedded) SPA for managing the shared template/model catalog and pricing margins",
+  "description": "AI UGC Generator internal admin panel — standalone (non-embedded) SPA for managing the shared template/model catalog and pricing margins",
   "type": "module",
   "scripts": {
     "dev": "vite",

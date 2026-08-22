@@ -2,7 +2,7 @@
   "name": "web",
   "private": true,
   "version": "1.0.0",
-  "description": "MotionArt merchant-facing embedded Shopify admin frontend",
+  "description": "AI UGC Generator merchant-facing embedded Shopify admin frontend",
   "type": "module",
   "scripts": {
     "dev": "vite",

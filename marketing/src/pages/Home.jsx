@@ -7,7 +7,7 @@ const STEPS = [
   },
   {
     title: 'Generate',
-    body: 'MotionArt generates studio-quality product photos, UGC-style lifestyle shots, or short videos with AI.',
+    body: 'AI UGC Generator generates studio-quality product photos, UGC-style lifestyle shots, or short videos with AI.',
   },
   {
     title: 'Publish back to your store',
@@ -21,11 +21,11 @@ export default function Home() {
       <section className="hero">
         <h1>AI product photography, straight from your catalog</h1>
         <p>
-          MotionArt turns the products you already sell into studio-quality photos, UGC-style
+          AI UGC Generator turns the products you already sell into studio-quality photos, UGC-style
           lifestyle images, and short product videos — no photoshoot required.
         </p>
         <Link to="/install" className="btn">
-          Install MotionArt
+          Install AI UGC Generator
         </Link>
       </section>
 
@@ -47,7 +47,7 @@ export default function Home() {
       <section className="cta-banner">
         <h2>Ready to see your products in a new light?</h2>
         <Link to="/install" className="btn">
-          Install MotionArt
+          Install AI UGC Generator
         </Link>
       </section>
     </>

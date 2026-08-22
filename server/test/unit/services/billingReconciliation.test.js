@@ -17,11 +17,11 @@ describe('services/billingReconciliation', () => {
   describe('creditsForPack', () => {
     it('resolves a subscription name containing a pack label to that pack\'s monthly credits', () => {
       const pack = CREDIT_PACKS.find((p) => p.id === 'growth');
-      expect(creditsForPack(`MotionArt ${pack.label} (Monthly)`)).toBe(pack.monthlyCredits);
+      expect(creditsForPack(`AI UGC Generator ${pack.label} (Monthly)`)).toBe(pack.monthlyCredits);
     });
 
     it('resolves the Unlimited plan to 0 (never draws down a balance)', () => {
-      expect(creditsForPack(`MotionArt ${UNLIMITED_PLAN.label}`)).toBe(0);
+      expect(creditsForPack(`AI UGC Generator ${UNLIMITED_PLAN.label}`)).toBe(0);
     });
 
     it('returns null for a name matching no known pack/plan', () => {
@@ -45,7 +45,7 @@ describe('services/billingReconciliation', () => {
           data: {
             currentAppInstallation: {
               activeSubscriptions: [
-                { id: 'gid://shopify/AppSubscription/1', name: 'MotionArt Growth (Monthly)', status: 'ACTIVE', currentPeriodEnd: '2026-09-01' },
+                { id: 'gid://shopify/AppSubscription/1', name: 'AI UGC Generator Growth (Monthly)', status: 'ACTIVE', currentPeriodEnd: '2026-09-01' },
               ],
             },
           },
@@ -70,7 +70,7 @@ describe('services/billingReconciliation', () => {
           data: {
             currentAppInstallation: {
               activeSubscriptions: [
-                { id: 'sub-1', name: 'MotionArt Growth (Monthly)', status: 'CANCELLED', currentPeriodEnd: '2026-09-01' },
+                { id: 'sub-1', name: 'AI UGC Generator Growth (Monthly)', status: 'CANCELLED', currentPeriodEnd: '2026-09-01' },
                 { id: 'sub-2', name: 'Unknown Plan', status: 'ACTIVE', currentPeriodEnd: '2026-09-01' },
               ],
             },
@@ -94,7 +94,7 @@ describe('services/billingReconciliation', () => {
         request: vi.fn().mockResolvedValue({
           data: {
             currentAppInstallation: {
-              activeSubscriptions: [{ id: 'sub-1', name: 'MotionArt Growth (Monthly)', status: 'ACTIVE', currentPeriodEnd: '2026-09-01' }],
+              activeSubscriptions: [{ id: 'sub-1', name: 'AI UGC Generator Growth (Monthly)', status: 'ACTIVE', currentPeriodEnd: '2026-09-01' }],
             },
           },
         }),

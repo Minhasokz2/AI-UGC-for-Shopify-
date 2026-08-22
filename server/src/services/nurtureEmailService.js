@@ -30,12 +30,12 @@ const NURTURE_CAMPAIGNS = [
     shouldSend: (shop, now) => !shop.firstJobCreatedAt && hoursSince(shop.installedAt, now) >= ONBOARDING_NUDGE_DELAY_HOURS,
     subject: "Let's generate your first AI product photo",
     buildHtml: () =>
-      '<p>Your MotionArt trial credits are ready. Pick a product from your catalog and generate your first scene in under a minute.</p>',
+      '<p>Your AI UGC Generator trial credits are ready. Pick a product from your catalog and generate your first scene in under a minute.</p>',
   },
   {
     key: 'low_credits_reminder',
     shouldSend: (shop) => shop.plan === 'metered' && !!shop.firstJobCreatedAt && (shop.creditBalance ?? 0) <= LOW_CREDITS_EMAIL_THRESHOLD,
-    subject: 'Your MotionArt credits are running low',
+    subject: 'Your AI UGC Generator credits are running low',
     buildHtml: (shop) =>
       `<p>You have ${shop.creditBalance ?? 0} credit(s) left. Top up or upgrade your plan to keep generating.</p>`,
   },
