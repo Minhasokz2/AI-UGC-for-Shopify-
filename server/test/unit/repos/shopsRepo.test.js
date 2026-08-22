@@ -153,4 +153,20 @@ describe('repos/shopsRepo', () => {
       expect(secondPage.map((s) => s.id)).toEqual(['b.myshopify.com']);
     });
   });
+
+  describe('findByReferralCode', () => {
+    it('returns the shop owning the code', async () => {
+      const { db, repo } = makeRepo();
+      await db.collection('shops').doc('a.myshopify.com').set({ referralCode: 'ABC123' });
+
+      const shop = await repo.findByReferralCode('ABC123');
+
+      expect(shop).toEqual({ id: 'a.myshopify.com', referralCode: 'ABC123' });
+    });
+
+    it('returns undefined when no shop owns the code', async () => {
+      const { repo } = makeRepo();
+      expect(await repo.findByReferralCode('NOPE')).toBeUndefined();
+    });
+  });
 });

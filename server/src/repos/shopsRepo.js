@@ -86,6 +86,14 @@ function createShopsRepo({ db, FieldValue }) {
     return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
   }
 
+  /** Referral codes are unique per shop — used both to resolve an incoming referral and to detect a collision when minting a new code. */
+  async function findByReferralCode(code) {
+    const snap = await shopsCol.where('referralCode', '==', code).limit(1).get();
+    if (snap.empty) return undefined;
+    const doc = snap.docs[0];
+    return { id: doc.id, ...doc.data() };
+  }
+
   return {
     getOrCreateShop,
     getShop,
@@ -93,6 +101,7 @@ function createShopsRepo({ db, FieldValue }) {
     markFirstJobCreated,
     markUninstalled,
     listInstalledShops,
+    findByReferralCode,
   };
 }
 
