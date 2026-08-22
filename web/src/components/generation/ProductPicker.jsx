@@ -50,6 +50,13 @@ export function ProductPicker({ multiple = false, selectedIds = [], onChangeSele
         </Button>
       </InlineStack>
 
+      {/* Sync failures were previously silent — the button would spin, finish, and the list would
+          just stay empty with no indication anything went wrong. This surfaces the mutation's own
+          error the same way the product-list query's error is already surfaced below, so a real
+          failure (e.g. a Shopify Admin API scope/permission error) is visible instead of reading
+          as "the app is broken" with zero diagnostic signal. */}
+      {syncProducts.isError && <ErrorState error={syncProducts.error} title="Couldn't sync catalog" />}
+
       {isLoading && <LoadingState label="Loading products…" />}
       {isError && <ErrorState error={error} title="Couldn't load products" />}
       {!isLoading && !isError && products.length === 0 && (
