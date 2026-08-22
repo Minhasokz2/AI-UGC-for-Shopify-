@@ -9,7 +9,12 @@ function chunk(array, size) {
 }
 
 function productDocId(shopDomain, shopifyProductId) {
-  return `${shopDomain}:${shopifyProductId}`;
+  // shopifyProductId is a GID (e.g. "gid://shopify/Product/123") — Firestore
+  // treats "/" as a path separator, so it can't appear inside a single doc
+  // id. The full GID is preserved untouched in the `shopifyProductId` field
+  // (still needed as-is for the publish mutations back to Shopify); only the
+  // id used to address the doc is sanitized.
+  return `${shopDomain}:${String(shopifyProductId).replace(/\//g, '_')}`;
 }
 
 /**

@@ -40,6 +40,19 @@ describe('repos/productsRepo', () => {
       const all = await db.collection('products').get();
       expect(all.size).toBe(2);
     });
+
+    it('sanitizes the "/" in a GID-shaped shopifyProductId out of the doc id — Firestore rejects a doc id containing "/" as an invalid resource path', async () => {
+      const { db, repo } = makeRepo();
+      const { id } = await repo.upsertProduct({
+        shopDomain: 'shop-a',
+        shopifyProductId: 'gid://shopify/Product/123456789',
+        title: 'A',
+      });
+
+      expect(id).not.toMatch(/\//);
+      const all = await db.collection('products').get();
+      expect(all.docs[0].data().shopifyProductId).toBe('gid://shopify/Product/123456789');
+    });
   });
 
   describe('queryByShop', () => {
