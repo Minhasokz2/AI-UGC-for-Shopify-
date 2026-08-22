@@ -1,9 +1,9 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "REPLACE_WITH_SHOPIFY_API_KEY"
+client_id = "571cb8440f887141962852ea77de71f0"
 name = "MotionArt"
 handle = "motionart"
-application_url = "https://REPLACE_WITH_YOUR_RENDER_URL.onrender.com"
+application_url = "https://motionart.onrender.com"
 embedded = true
 
 [access_scopes]
@@ -17,7 +17,7 @@ use_legacy_install_flow = false
 # Kept for Partner Dashboard/CLI validation. The server uses token exchange
 # (future.tokenExchange) for embedded auth, so this callback path is not actually
 # hit in normal operation.
-redirect_urls = [ "https://REPLACE_WITH_YOUR_RENDER_URL.onrender.com/api/auth/callback" ]
+redirect_urls = [ "https://motionart.onrender.com/api/auth/callback" ]
 
 [webhooks]
 # Keep this in sync with CURRENT_API_VERSION in server/src/config/shopify.js —
