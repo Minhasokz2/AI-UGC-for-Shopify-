@@ -36,7 +36,7 @@ npm run dev:marketing
 ```
 
 ```bash
-npm test                # full Vitest suite (server unit + integration, then web)
+npm test                # full Vitest suite: server (unit + integration), then web, admin, marketing
 npm run build            # builds web, marketing, admin (in that order) for production
 npm run seed:templates   # upserts the Templates catalog into Firestore
 npm run seed:models      # upserts the Allowed Models catalog (also available as
@@ -86,4 +86,14 @@ business logic is verified against mocked SDKs / an in-memory fake Firestore. Be
 5. **`marketing/` hosting**: `build.sh` builds `marketing/dist` but nothing deploys it — it isn't
    served by the Render web service (see "Monorepo layout" above for why). Point a separate static
    host at `marketing/dist` and update the Shopify App Store listing / any "learn more" links to
-   that domain once it exists.
+   that domain once it exists. Set `VITE_API_BASE_URL` (build-time) to the real API server's
+   origin (e.g. `https://app.motionart.com`) when building `marketing/` for that separate host —
+   it defaults to a same-origin relative fetch, which only works if marketing/ is deliberately
+   served from behind the same domain/proxy as the API.
+6. **Shopify App Store listing URL**: `marketing/src/pages/Install.jsx` links to a placeholder
+   (`https://apps.shopify.com/motionart`) — replace it once MotionArt has a real listing.
+7. **`@shopify/polaris` (React) is deprecated** — `npm install` prints this warning. `web/` and
+   `admin/` were built against it since it's still the current, functional, documented way to get
+   Shopify-styled React components as of this build; Shopify's replacement (Polaris web
+   components) is a different, non-React API surface and migrating to it is a deliberate future
+   project, not something to casually swap in.
