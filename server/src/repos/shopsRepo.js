@@ -74,12 +74,25 @@ function createShopsRepo({ db, FieldValue }) {
     await shopsCol.doc(shopDomain).update({ uninstalledAt: FieldValue.serverTimestamp() });
   }
 
+  /**
+   * Paginated listing of currently-installed shops, ordered by shopDomain for a
+   * stable cursor. Used by billingReconciliation.js's sweep, which must walk
+   * every installed shop rather than one at a time.
+   */
+  async function listInstalledShops({ cursor, limit = 100 } = {}) {
+    let query = shopsCol.where('uninstalledAt', '==', null).orderBy('shopDomain', 'asc').limit(limit);
+    if (cursor !== undefined) query = query.startAfter(cursor);
+    const snap = await query.get();
+    return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  }
+
   return {
     getOrCreateShop,
     getShop,
     updateShop,
     markFirstJobCreated,
     markUninstalled,
+    listInstalledShops,
   };
 }
 

@@ -128,4 +128,29 @@ describe('repos/shopsRepo', () => {
       expect(stored.uninstalledAt).toBeInstanceOf(FakeTimestamp);
     });
   });
+
+  describe('listInstalledShops', () => {
+    it('returns only shops with uninstalledAt == null, ordered by shopDomain', async () => {
+      const { db, repo } = makeRepo();
+      await db.collection('shops').doc('b.myshopify.com').set({ shopDomain: 'b.myshopify.com', uninstalledAt: null });
+      await db.collection('shops').doc('a.myshopify.com').set({ shopDomain: 'a.myshopify.com', uninstalledAt: null });
+      await db.collection('shops').doc('c.myshopify.com').set({ shopDomain: 'c.myshopify.com', uninstalledAt: FieldValue.serverTimestamp() });
+
+      const shops = await repo.listInstalledShops();
+
+      expect(shops.map((s) => s.id)).toEqual(['a.myshopify.com', 'b.myshopify.com']);
+    });
+
+    it('paginates via cursor/limit', async () => {
+      const { db, repo } = makeRepo();
+      await db.collection('shops').doc('a.myshopify.com').set({ shopDomain: 'a.myshopify.com', uninstalledAt: null });
+      await db.collection('shops').doc('b.myshopify.com').set({ shopDomain: 'b.myshopify.com', uninstalledAt: null });
+
+      const firstPage = await repo.listInstalledShops({ limit: 1 });
+      expect(firstPage.map((s) => s.id)).toEqual(['a.myshopify.com']);
+
+      const secondPage = await repo.listInstalledShops({ limit: 1, cursor: firstPage[0].shopDomain });
+      expect(secondPage.map((s) => s.id)).toEqual(['b.myshopify.com']);
+    });
+  });
 });
