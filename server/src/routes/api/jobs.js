@@ -23,22 +23,38 @@ const { JOB_WORKER_PER_SHOP_CONCURRENCY } = require('../../config/constants');
 
 const CONTENT_TYPES = ['scene', 'ugc', 'video', 'custom', 'tryOn'];
 
-const createJobSchema = z.object({
-  contentType: z.enum(CONTENT_TYPES),
-  templateId: z.string().optional(),
-  modelId: z.string().optional(),
-  prompt: z.string().optional(),
-  sourceImageUrl: z.string().url().optional(),
-  imageUrls: z.array(z.string().url()).optional(),
-  personImageUrl: z.string().url().optional(),
-  garmentImageUrl: z.string().url().optional(),
-  numImages: z.number().int().min(1).max(10).default(1),
-  personaAttributes: z.object({ ageRange: z.string() }).optional(),
-  videoTier: z.enum(['fast', 'standard', 'premium']).optional(),
-  productCategory: z.string().optional(),
-  reuseProcessedImageFrom: z.string().optional(),
-  batchId: z.string().optional(),
-});
+const createJobSchema = z
+  .object({
+    contentType: z.enum(CONTENT_TYPES),
+    templateId: z.string().optional(),
+    modelId: z.string().optional(),
+    prompt: z.string().optional(),
+    sourceImageUrl: z.string().url().optional(),
+    imageUrls: z.array(z.string().url()).optional(),
+    personImageUrl: z.string().url().optional(),
+    garmentImageUrl: z.string().url().optional(),
+    numImages: z.number().int().min(1).max(10).default(1),
+    personaAttributes: z.object({ ageRange: z.string() }).optional(),
+    videoTier: z.enum(['fast', 'standard', 'premium']).optional(),
+    productCategory: z.string().optional(),
+    reuseProcessedImageFrom: z.string().optional(),
+    batchId: z.string().optional(),
+  })
+  .superRefine((job, ctx) => {
+    // Catch obviously-incomplete requests here, before they ever reach model
+    // resolution/dispatch — cheaper to reject with a clear 400 than to let a
+    // malformed request fail deep inside the pipeline with a confusing error.
+    if (job.contentType === 'tryOn' && (!job.personImageUrl || !job.garmentImageUrl)) {
+      ctx.addIssue({ code: 'custom', path: ['personImageUrl'], message: 'tryOn jobs require both personImageUrl and garmentImageUrl' });
+    }
+    if (job.contentType === 'custom' && !job.modelId) {
+      ctx.addIssue({ code: 'custom', path: ['modelId'], message: 'custom jobs require a modelId' });
+    }
+    const needsSourceImage = !job.templateId && job.contentType !== 'custom' && job.contentType !== 'tryOn';
+    if (needsSourceImage && !job.sourceImageUrl && !job.reuseProcessedImageFrom) {
+      ctx.addIssue({ code: 'custom', path: ['sourceImageUrl'], message: 'A sourceImageUrl (or reuseProcessedImageFrom) is required' });
+    }
+  });
 
 /**
  * Resolves the model up front to (a) validate templateId/modelId exist and

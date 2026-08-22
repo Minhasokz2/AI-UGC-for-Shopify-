@@ -1,5 +1,6 @@
 const request = require('supertest');
 const { buildTestApp } = require('../../helpers/buildTestApp');
+const { seedAllowedModels } = require('../../../src/services/allowedModelsSeedData');
 
 const SHOP = 'test-shop.myshopify.com';
 
@@ -114,6 +115,47 @@ describe('integration: /api/jobs', () => {
       const res = await request(app).post('/api/jobs').set('Idempotency-Key', 'idem-5').send({ contentType: 'not-a-real-type' });
 
       expect(res.status).toBe(400);
+    });
+
+    it('returns 400 for a tryOn job missing personImageUrl/garmentImageUrl', async () => {
+      const { app, db } = buildTestApp();
+      await seedShop(db);
+
+      const res = await request(app).post('/api/jobs').set('Idempotency-Key', 'idem-6').send({ contentType: 'tryOn', personImageUrl: 'https://cdn/person.png' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 for a custom job with no modelId', async () => {
+      const { app, db } = buildTestApp();
+      await seedShop(db);
+
+      const res = await request(app).post('/api/jobs').set('Idempotency-Key', 'idem-7').send({ contentType: 'custom', prompt: 'a cat' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 for a template-less scene job with no sourceImageUrl and no reuseProcessedImageFrom', async () => {
+      const { app, db } = buildTestApp();
+      await seedShop(db);
+
+      const res = await request(app).post('/api/jobs').set('Idempotency-Key', 'idem-8').send({ contentType: 'scene' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('accepts a template-less scene job that reuses a prior job\'s processed image instead of a fresh sourceImageUrl', async () => {
+      const { app, db } = buildTestApp();
+      await seedShop(db, { creditBalance: 1000 });
+      await seedAllowedModels({ db });
+      await db.collection('jobs').doc('prior-job').set({ shopDomain: SHOP, status: 'succeeded', processedImageUrl: 'https://cdn/clean.png' });
+
+      const res = await request(app)
+        .post('/api/jobs')
+        .set('Idempotency-Key', 'idem-9')
+        .send({ contentType: 'scene', reuseProcessedImageFrom: 'prior-job' });
+
+      expect(res.status).toBe(201);
     });
   });
 

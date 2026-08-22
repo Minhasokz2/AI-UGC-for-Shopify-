@@ -82,4 +82,28 @@ describe('integration: /api/batches', () => {
 
     expect(res.status).toBe(404);
   });
+
+  it('returns 400 for a tryOn batch (not representable by this schema)', async () => {
+    const { app, db } = buildTestApp();
+    await seedShop(db);
+
+    const res = await request(app)
+      .post('/api/batches')
+      .set('Idempotency-Key', 'batch-4')
+      .send({ contentType: 'tryOn', items: [{ sourceImageUrl: 'https://cdn/1.png' }] });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for a custom batch with no modelId', async () => {
+    const { app, db } = buildTestApp();
+    await seedShop(db);
+
+    const res = await request(app)
+      .post('/api/batches')
+      .set('Idempotency-Key', 'batch-5')
+      .send({ contentType: 'custom', prompt: 'a cat', items: [{ sourceImageUrl: 'https://cdn/1.png' }] });
+
+    expect(res.status).toBe(400);
+  });
 });

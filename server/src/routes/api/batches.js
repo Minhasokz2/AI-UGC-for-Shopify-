@@ -14,17 +14,29 @@ const { ValidationError, ConcurrencyLimitError, NotFoundError } = require('../..
 const { JOB_WORKER_PER_SHOP_CONCURRENCY } = require('../../config/constants');
 const { CONTENT_TYPES } = require('./jobs');
 
-const createBatchSchema = z.object({
-  contentType: z.enum(CONTENT_TYPES),
-  templateId: z.string().optional(),
-  modelId: z.string().optional(),
-  prompt: z.string().optional(),
-  numImages: z.number().int().min(1).max(10).default(1),
-  personaAttributes: z.object({ ageRange: z.string() }).optional(),
-  videoTier: z.enum(['fast', 'standard', 'premium']).optional(),
-  productCategory: z.string().optional(),
-  items: z.array(z.object({ sourceImageUrl: z.string().url() })).min(1).max(200),
-});
+const createBatchSchema = z
+  .object({
+    contentType: z.enum(CONTENT_TYPES),
+    templateId: z.string().optional(),
+    modelId: z.string().optional(),
+    prompt: z.string().optional(),
+    numImages: z.number().int().min(1).max(10).default(1),
+    personaAttributes: z.object({ ageRange: z.string() }).optional(),
+    videoTier: z.enum(['fast', 'standard', 'premium']).optional(),
+    productCategory: z.string().optional(),
+    items: z.array(z.object({ sourceImageUrl: z.string().url() })).min(1).max(200),
+  })
+  .superRefine((batch, ctx) => {
+    // Virtual Try-On needs a dual person/garment image pair per item, which
+    // this schema has no field for — reject explicitly rather than letting it
+    // fail confusingly deep inside model resolution.
+    if (batch.contentType === 'tryOn') {
+      ctx.addIssue({ code: 'custom', path: ['contentType'], message: 'tryOn is not supported for bulk batches' });
+    }
+    if (batch.contentType === 'custom' && !batch.modelId) {
+      ctx.addIssue({ code: 'custom', path: ['modelId'], message: 'custom batches require a modelId' });
+    }
+  });
 
 /**
  * @param {{ jobsRepo: object, batchesRepo: object, templatesRepo: object, allowedModelsRepo: object, credits: object, jobWorker: object }} deps
