@@ -105,7 +105,7 @@ function createBillingRouter({ billingService, shopsRepo, getGraphqlClient, retu
         return;
       }
 
-      if (node.name === UNLIMITED_PLAN.label || node.name.includes(UNLIMITED_PLAN.label)) {
+      if (node.name.includes(UNLIMITED_PLAN.label)) {
         await billingService.activateUnlimitedPlan(req.shopDomain, node.id);
         res.json({ confirmed: true, plan: 'unlimited' });
         return;
