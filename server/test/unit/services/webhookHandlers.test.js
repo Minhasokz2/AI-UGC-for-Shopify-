@@ -2,10 +2,14 @@ const { DeliveryMethod } = require('@shopify/shopify-api');
 const { createWebhookHandlers } = require('../../../src/services/webhookHandlers');
 const { env } = require('../../../src/config/env');
 
-function makeDeps() {
+function makeDeps({ sessions = [] } = {}) {
   return {
     shopsRepo: { markUninstalled: vi.fn().mockResolvedValue(undefined), updateShop: vi.fn().mockResolvedValue(undefined) },
     productsRepo: { deleteAllForShop: vi.fn().mockResolvedValue(undefined) },
+    sessionStorage: {
+      findSessionsByShop: vi.fn().mockResolvedValue(sessions),
+      deleteSessions: vi.fn().mockResolvedValue(undefined),
+    },
   };
 }
 
@@ -27,6 +31,25 @@ describe('services/webhookHandlers', () => {
     await handlers.APP_UNINSTALLED.callback('app/uninstalled', 'shop-a.myshopify.com', '{}', 'wh-1', '2026-07');
 
     expect(deps.shopsRepo.markUninstalled).toHaveBeenCalledWith('shop-a.myshopify.com');
+  });
+
+  it('APP_UNINSTALLED deletes the shop\'s stored session(s) — a reinstall must get a fresh token exchange, never a reused stale-scope session', async () => {
+    const deps = makeDeps({ sessions: [{ id: 'offline_shop-a.myshopify.com' }, { id: 'shop-a.myshopify.com_user123' }] });
+    const handlers = createWebhookHandlers(deps);
+
+    await handlers.APP_UNINSTALLED.callback('app/uninstalled', 'shop-a.myshopify.com', '{}', 'wh-1', '2026-07');
+
+    expect(deps.sessionStorage.findSessionsByShop).toHaveBeenCalledWith('shop-a.myshopify.com');
+    expect(deps.sessionStorage.deleteSessions).toHaveBeenCalledWith(['offline_shop-a.myshopify.com', 'shop-a.myshopify.com_user123']);
+  });
+
+  it('APP_UNINSTALLED skips deleteSessions when the shop has no stored session', async () => {
+    const deps = makeDeps({ sessions: [] });
+    const handlers = createWebhookHandlers(deps);
+
+    await handlers.APP_UNINSTALLED.callback('app/uninstalled', 'shop-a.myshopify.com', '{}', 'wh-1', '2026-07');
+
+    expect(deps.sessionStorage.deleteSessions).not.toHaveBeenCalled();
   });
 
   it('SHOP_REDACT deletes the cached product catalog and clears PII fields on the shop doc', async () => {

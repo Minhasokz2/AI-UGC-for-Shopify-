@@ -24,15 +24,25 @@ const { env } = require('../config/env');
 const { logger } = require('../config/logger');
 
 /**
- * @param {{ shopsRepo: object, productsRepo: object }} deps
+ * @param {{ shopsRepo: object, productsRepo: object, sessionStorage: object }} deps
  */
-function createWebhookHandlers({ shopsRepo, productsRepo }) {
+function createWebhookHandlers({ shopsRepo, productsRepo, sessionStorage }) {
   return {
     APP_UNINSTALLED: {
       deliveryMethod: DeliveryMethod.Http,
       callbackUrl: env.SHOPIFY_WEBHOOK_PATH,
       callback: async (_topic, shop) => {
         await shopsRepo.markUninstalled(shop);
+        // Must delete the stored session too, not just mark the shop uninstalled —
+        // otherwise a reinstall's token exchange (perform-token-exchange.ts in the
+        // installed SDK) finds this still-"active" session and reuses it forever,
+        // never requesting a fresh token even if the app's required scopes changed
+        // in the meantime. Confirmed live: a shop's session sat with a stale scope
+        // across multiple full uninstall/reinstall attempts until this was fixed.
+        const sessions = await sessionStorage.findSessionsByShop(shop);
+        if (sessions.length > 0) {
+          await sessionStorage.deleteSessions(sessions.map((session) => session.id));
+        }
         logger.info({ shop }, 'webhookHandlers: APP_UNINSTALLED processed');
       },
     },
