@@ -75,13 +75,13 @@ describe('services/credits', () => {
   describe('estimateJobCost (non-transactional, pre-flight)', () => {
     it('estimates from a template', async () => {
       const { db, credits } = makeService();
-      await db.collection('templates').doc('tpl-1').set({ creditCost: 3 });
+      await db.collection('templates').doc('tpl-1').set({ creditCost: 3, modelRole: 'test_role' });
       expect(await credits.estimateJobCost({ templateId: 'tpl-1', numImages: 2 })).toBe(6);
     });
 
     it('estimates from a model', async () => {
       const { db, credits } = makeService();
-      await db.collection('allowed_models').doc('model-1').set({ creditCost: 2 });
+      await db.collection('allowed_models').doc('model-1').set({ creditCost: 2, role: 'test_role' });
       expect(await credits.estimateJobCost({ modelId: 'model-1', numImages: 4 })).toBe(8);
     });
 

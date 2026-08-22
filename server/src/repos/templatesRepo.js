@@ -1,6 +1,21 @@
 const TEMPLATES_COLLECTION = 'templates';
 
 /**
+ * This `templates` collection is deliberately shared with a different,
+ * separately-running app in the same Firebase project (kept intentionally —
+ * see the operator's explicit instruction to reuse this exact Firestore
+ * project rather than provisioning a new one). That other app's documents
+ * use an incompatible shape (`preferredModel`/`promptTemplate`/`name` instead
+ * of `modelRole`/`prompt`/`label`) and must never surface here — every
+ * MotionArt template has `modelRole` (generationPipeline.resolveModelForJob
+ * requires it to route a job to an actual model), so its absence reliably
+ * marks a document as belonging to the other app.
+ */
+function isOwnTemplate(template) {
+  return template.modelRole !== undefined;
+}
+
+/**
  * Admin-curated template catalog, shared across every shop (not shop-scoped),
  * keyed by slug.
  * @param {{ db: object, FieldValue: object }} opts
@@ -12,12 +27,14 @@ function createTemplatesRepo({ db, FieldValue }) {
     let query = templatesCol;
     if (category) query = query.where('category', '==', category);
     const snap = await query.get();
-    return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter(isOwnTemplate);
   }
 
   async function getTemplate(slug) {
     const snap = await templatesCol.doc(slug).get();
-    return snap.exists ? { id: slug, ...snap.data() } : undefined;
+    if (!snap.exists) return undefined;
+    const template = { id: slug, ...snap.data() };
+    return isOwnTemplate(template) ? template : undefined;
   }
 
   /** Full upsert semantics — this is the admin CRUD path, so overwriting is intended. */

@@ -10,9 +10,9 @@ function makeRepo() {
 describe('repos/allowedModelsRepo', () => {
   describe('listModels', () => {
     async function seedModels(repo) {
-      await repo.upsertModel('m1', { category: 'image', eligibleFlows: ['scene', 'ugc'] });
-      await repo.upsertModel('m2', { category: 'image', eligibleFlows: ['scene'] });
-      await repo.upsertModel('m3', { category: 'video', eligibleFlows: ['ugc'] });
+      await repo.upsertModel('m1', { role: 'r1', category: 'image', eligibleFlows: ['scene', 'ugc'] });
+      await repo.upsertModel('m2', { role: 'r2', category: 'image', eligibleFlows: ['scene'] });
+      await repo.upsertModel('m3', { role: 'r3', category: 'video', eligibleFlows: ['ugc'] });
     }
 
     it('returns all models when no filter is given', async () => {
@@ -49,6 +49,16 @@ describe('repos/allowedModelsRepo', () => {
       const results = await repo.listModels({ eligibleFlow: 'scene', category: 'video' });
       expect(results).toEqual([]);
     });
+
+    it('excludes a document with no role — this collection is shared with a different app', async () => {
+      const { repo } = makeRepo();
+      await seedModels(repo);
+      await repo.upsertModel('foreign-doc', { category: 'image', preferredModel: 'not-ours' });
+
+      const results = await repo.listModels();
+
+      expect(results.map((r) => r.id).sort()).toEqual(['m1', 'm2', 'm3']);
+    });
   });
 
   describe('getModel', () => {
@@ -56,12 +66,18 @@ describe('repos/allowedModelsRepo', () => {
       const { repo } = makeRepo();
       expect(await repo.getModel('missing')).toBeUndefined();
     });
+
+    it('returns undefined for a document with no role — this collection is shared with a different app', async () => {
+      const { repo } = makeRepo();
+      await repo.upsertModel('foreign-doc', { category: 'image', preferredModel: 'not-ours' });
+      expect(await repo.getModel('foreign-doc')).toBeUndefined();
+    });
   });
 
   describe('upsertModel / deleteModel', () => {
     it('upsert creates then updates (merge)', async () => {
       const { repo } = makeRepo();
-      await repo.upsertModel('m1', { category: 'image', eligibleFlows: ['scene'] });
+      await repo.upsertModel('m1', { role: 'r1', category: 'image', eligibleFlows: ['scene'] });
       await repo.upsertModel('m1', { category: 'video' });
 
       const stored = await repo.getModel('m1');
@@ -71,7 +87,7 @@ describe('repos/allowedModelsRepo', () => {
 
     it('delete removes the model', async () => {
       const { repo } = makeRepo();
-      await repo.upsertModel('m1', { category: 'image' });
+      await repo.upsertModel('m1', { role: 'r1', category: 'image' });
       await repo.deleteModel('m1');
       expect(await repo.getModel('m1')).toBeUndefined();
     });
