@@ -81,4 +81,50 @@ describe('repos/imageOptimizerUsageRepo', () => {
       expect(result).toEqual({ allowed: true, countToday: 1, freeDailyQuota: 1 });
     });
   });
+
+  describe('refundQuota', () => {
+    it('decrements today\'s count by 1 — a job that failed should not have cost the merchant a unit', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-21T12:00:00Z'));
+      const { db, repo } = makeRepo();
+      await repo.checkAndIncrementQuota('shop-a', { freeDailyQuota: 10 });
+      await repo.checkAndIncrementQuota('shop-a', { freeDailyQuota: 10 });
+
+      await repo.refundQuota('shop-a');
+
+      const stored = (await db.collection('image_optimizer_usage').doc('shop-a').get()).data();
+      expect(stored.countToday).toBe(1);
+    });
+
+    it('clamps at 0 rather than going negative', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-21T12:00:00Z'));
+      const { db, repo } = makeRepo();
+      await repo.checkAndIncrementQuota('shop-a', { freeDailyQuota: 10 });
+
+      await repo.refundQuota('shop-a');
+      await repo.refundQuota('shop-a');
+
+      const stored = (await db.collection('image_optimizer_usage').doc('shop-a').get()).data();
+      expect(stored.countToday).toBe(0);
+    });
+
+    it('is a no-op when the stored count has already rolled over to a new UTC day', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-21T12:00:00Z'));
+      const { db, repo } = makeRepo();
+      await repo.checkAndIncrementQuota('shop-a', { freeDailyQuota: 10 });
+
+      vi.setSystemTime(new Date('2026-08-22T00:05:00Z'));
+      await repo.refundQuota('shop-a');
+
+      const stored = (await db.collection('image_optimizer_usage').doc('shop-a').get()).data();
+      expect(stored).toEqual({ date: '2026-08-21', countToday: 1 });
+    });
+
+    it('is a no-op when the shop has no usage doc at all yet', async () => {
+      const { repo } = makeRepo();
+      await expect(repo.refundQuota('never-used-shop')).resolves.not.toThrow();
+    });
+  });
 });

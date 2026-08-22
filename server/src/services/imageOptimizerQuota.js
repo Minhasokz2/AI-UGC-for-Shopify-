@@ -26,7 +26,20 @@ function createImageOptimizerQuota({ imageOptimizerUsageRepo }) {
     return { allowed: result.allowed, unlimited: false, countToday: result.countToday, freeDailyQuota: result.freeDailyQuota };
   }
 
-  return { checkAndConsumeQuota };
+  /**
+   * Compensates a quota unit for a shop whose job failed or whose job
+   * creation errored after quota was already consumed. A no-op for a shop
+   * on the paid add-on — that path never consumed a counted unit to begin
+   * with, so there's nothing to give back.
+   * @param {object} shop a shop record (from shopsRepo.getShop/getOrCreateShop)
+   */
+  async function refundQuota(shop) {
+    if (shop?.addOns?.imageOptimizer) return;
+    const shopDomain = shop?.id ?? shop?.shopDomain;
+    await imageOptimizerUsageRepo.refundQuota(shopDomain);
+  }
+
+  return { checkAndConsumeQuota, refundQuota };
 }
 
 let singleton;

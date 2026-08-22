@@ -18,22 +18,63 @@ describe('repos/conversionJobsRepo', () => {
     vi.useRealTimers();
   });
 
-  describe('createConversionJob', () => {
+  describe('claimAndCreateConversionJob', () => {
     it('creates a pending job', async () => {
       const { db, repo } = makeRepo();
-      const job = await repo.createConversionJob({
-        shopDomain: 'shop-a',
+      const { job, isNew } = await repo.claimAndCreateConversionJob('shop-a', 'idem-1', {
         shopifyProductId: 'gid://shopify/Product/1',
         imageUrl: 'https://x/a.png',
         operation: 'compress',
       });
 
+      expect(isNew).toBe(true);
       expect(job.id).toBeTruthy();
       expect(job.status).toBe('pending');
       expect(job.operation).toBe('compress');
 
       const stored = (await db.collection('conversion_jobs').doc(job.id).get()).data();
       expect(stored.createdAt).toBeInstanceOf(FakeTimestamp);
+    });
+
+    it('a repeated idempotency key returns the SAME job (isNew:false) instead of creating a duplicate', async () => {
+      const { db, repo } = makeRepo();
+      const jobData = { shopifyProductId: 'gid://shopify/Product/1', imageUrl: 'https://x/a.png', operation: 'compress' };
+
+      const first = await repo.claimAndCreateConversionJob('shop-a', 'idem-1', jobData);
+      const second = await repo.claimAndCreateConversionJob('shop-a', 'idem-1', jobData);
+
+      expect(first.isNew).toBe(true);
+      expect(second.isNew).toBe(false);
+      expect(second.job.id).toBe(first.job.id);
+      const all = await db.collection('conversion_jobs').get();
+      expect(all.size).toBe(1);
+    });
+
+    it('the same idempotency key under a different shop does not collide', async () => {
+      const { repo } = makeRepo();
+      const jobData = { shopifyProductId: 'p1', imageUrl: 'https://x/a.png', operation: 'compress' };
+
+      const a = await repo.claimAndCreateConversionJob('shop-a', 'idem-1', jobData);
+      const b = await repo.claimAndCreateConversionJob('shop-b', 'idem-1', jobData);
+
+      expect(a.job.id).not.toBe(b.job.id);
+    });
+  });
+
+  describe('findByIdempotencyKey', () => {
+    it('returns undefined when no job was created for that key', async () => {
+      const { repo } = makeRepo();
+      expect(await repo.findByIdempotencyKey('shop-a', 'never-used')).toBeUndefined();
+    });
+
+    it('returns the job once claimAndCreateConversionJob has committed it', async () => {
+      const { repo } = makeRepo();
+      const jobData = { shopifyProductId: 'p1', imageUrl: 'https://x/a.png', operation: 'compress' };
+      const { job: created } = await repo.claimAndCreateConversionJob('shop-a', 'idem-1', jobData);
+
+      const found = await repo.findByIdempotencyKey('shop-a', 'idem-1');
+
+      expect(found.id).toBe(created.id);
     });
   });
 

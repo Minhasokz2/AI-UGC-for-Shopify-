@@ -9,7 +9,10 @@ function makeDeps(overrides = {}) {
       settleConversionFailure: vi.fn().mockResolvedValue({ skipped: false }),
       queryResumableJobs: vi.fn().mockResolvedValue([]),
     },
-    imageOptimizerService: { runOptimizationJob: vi.fn().mockResolvedValue({ url: 'https://cdn/optimized.png' }) },
+    imageOptimizerService: {
+      runOptimizationJob: vi.fn().mockResolvedValue({ url: 'https://cdn/optimized.png' }),
+      refundQuotaForShop: vi.fn().mockResolvedValue(undefined),
+    },
     workerId: 'worker-1',
     logger: { error: vi.fn() },
     captureException: vi.fn(),
@@ -44,16 +47,48 @@ describe('workers/imageOptimizerWorker', () => {
       expect(result).toEqual({ jobId: 'job-1', outcome: 'skipped', reason: 'terminal' });
     });
 
-    it('settles failure, logs, and reports to Sentry when the run throws', async () => {
+    it('settles failure, logs, reports to Sentry, and refunds the merchant\'s quota unit when the run throws', async () => {
       const err = new Error('model call failed');
-      const deps = makeDeps({ imageOptimizerService: { runOptimizationJob: vi.fn().mockRejectedValue(err) } });
+      const deps = makeDeps({
+        imageOptimizerService: { runOptimizationJob: vi.fn().mockRejectedValue(err), refundQuotaForShop: vi.fn().mockResolvedValue(undefined) },
+      });
       const worker = createImageOptimizerWorker(deps);
 
       const result = await worker.processJob({ id: 'job-1', shopDomain: 'shop-a' });
 
       expect(deps.conversionJobsRepo.settleConversionFailure).toHaveBeenCalledWith('job-1', { workerId: 'worker-1', error: err });
       expect(deps.captureException).toHaveBeenCalledWith(err, { tags: { jobId: 'job-1', shopDomain: 'shop-a' } });
+      expect(deps.imageOptimizerService.refundQuotaForShop).toHaveBeenCalledWith('shop-a');
       expect(result).toEqual({ jobId: 'job-1', outcome: 'failed' });
+    });
+
+    it('logs but does not rethrow when the quota refund itself fails — the job stays correctly marked failed', async () => {
+      const err = new Error('model call failed');
+      const refundErr = new Error('refund firestore write failed');
+      const deps = makeDeps({
+        imageOptimizerService: { runOptimizationJob: vi.fn().mockRejectedValue(err), refundQuotaForShop: vi.fn().mockRejectedValue(refundErr) },
+      });
+      const worker = createImageOptimizerWorker(deps);
+
+      const result = await worker.processJob({ id: 'job-1', shopDomain: 'shop-a' });
+
+      expect(result).toEqual({ jobId: 'job-1', outcome: 'failed' });
+      expect(deps.logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ err: refundErr, jobId: 'job-1', shopDomain: 'shop-a' }),
+        'Image Optimizer quota refund failed',
+      );
+    });
+
+    it('does not refund quota for a stale failure report from a worker that lost its lease', async () => {
+      const deps = makeDeps({
+        imageOptimizerService: { runOptimizationJob: vi.fn().mockRejectedValue(new Error('boom')), refundQuotaForShop: vi.fn() },
+      });
+      deps.conversionJobsRepo.settleConversionFailure = vi.fn().mockResolvedValue({ skipped: true });
+      const worker = createImageOptimizerWorker(deps);
+
+      await worker.processJob({ id: 'job-1', shopDomain: 'shop-a' });
+
+      expect(deps.imageOptimizerService.refundQuotaForShop).not.toHaveBeenCalled();
     });
 
     it('treats a LostLeaseError as a silent skip', async () => {

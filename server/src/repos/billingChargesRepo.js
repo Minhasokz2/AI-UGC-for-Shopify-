@@ -21,16 +21,21 @@ function createBillingChargesRepo({ db, FieldValue }) {
    * `chargeKey` must uniquely identify the thing being credited — for a one-time
    * purchase that's the Shopify charge GID; for a subscription renewal it's
    * `${subscriptionId}:${currentPeriodEnd}` so each billing cycle claims once.
+   * Both shapes contain a GID (e.g. "gid://shopify/AppSubscription/2"), which
+   * contains "/" — Firestore treats "/" as a path separator, so (same bug
+   * class already found and fixed in productsRepo.js this session) the raw
+   * chargeKey can't be used directly as a doc id. The real chargeKey is kept
+   * as a field for auditability; only the doc-addressing id is sanitized.
    * @returns {Promise<{ claimed: boolean }>}
    */
   async function claimCharge(chargeKey, { shopDomain, credits, type }) {
     return db.runTransaction(async (tx) => {
-      const ref = chargesCol.doc(chargeKey);
+      const ref = chargesCol.doc(chargeKey.replace(/\//g, '_'));
       const snap = await tx.get(ref);
       if (snap.exists) {
         return { claimed: false };
       }
-      tx.set(ref, { shopDomain, credits, type, processedAt: FieldValue.serverTimestamp() });
+      tx.set(ref, { chargeKey, shopDomain, credits, type, processedAt: FieldValue.serverTimestamp() });
       return { claimed: true };
     });
   }

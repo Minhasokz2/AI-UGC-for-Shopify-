@@ -19,9 +19,22 @@ describe('repos/billingChargesRepo', () => {
       });
 
       expect(result).toEqual({ claimed: true });
-      const stored = (await db.collection('billing_charges').doc('gid://shopify/AppPurchaseOneTime/1').get()).data();
-      expect(stored).toEqual(expect.objectContaining({ shopDomain: 'shop-a', credits: 200, type: 'one_time' }));
+      const snap = await db.collection('billing_charges').get();
+      expect(snap.size).toBe(1);
+      const stored = snap.docs[0].data();
+      expect(stored).toEqual(
+        expect.objectContaining({ chargeKey: 'gid://shopify/AppPurchaseOneTime/1', shopDomain: 'shop-a', credits: 200, type: 'one_time' }),
+      );
       expect(stored.processedAt).toBeInstanceOf(FakeTimestamp);
+    });
+
+    it('sanitizes the "/" in a GID-shaped chargeKey out of the doc id — Firestore rejects a doc id containing "/" as an invalid resource path', async () => {
+      const { db, repo } = makeRepo();
+
+      await repo.claimCharge('gid://shopify/AppSubscription/2', { shopDomain: 'shop-a', credits: 1500, type: 'subscription' });
+
+      const snap = await db.collection('billing_charges').get();
+      expect(snap.docs[0].id).not.toMatch(/\//);
     });
 
     it('a second claim for the same charge key returns claimed:false and does not overwrite', async () => {
@@ -35,10 +48,10 @@ describe('repos/billingChargesRepo', () => {
       expect(stored.credits).toBe(200);
     });
 
-    it('different charge keys do not collide (e.g. distinct renewal cycles for the same subscription)', async () => {
+    it('different charge keys do not collide (e.g. distinct renewal cycles for the same GID subscription)', async () => {
       const { repo } = makeRepo();
-      const cycle1 = await repo.claimCharge('sub-1:2026-01-01', { shopDomain: 'shop-a', credits: 600, type: 'renewal' });
-      const cycle2 = await repo.claimCharge('sub-1:2026-02-01', { shopDomain: 'shop-a', credits: 600, type: 'renewal' });
+      const cycle1 = await repo.claimCharge('gid://shopify/AppSubscription/9:2026-01-01', { shopDomain: 'shop-a', credits: 600, type: 'renewal' });
+      const cycle2 = await repo.claimCharge('gid://shopify/AppSubscription/9:2026-02-01', { shopDomain: 'shop-a', credits: 600, type: 'renewal' });
       expect(cycle1.claimed).toBe(true);
       expect(cycle2.claimed).toBe(true);
     });

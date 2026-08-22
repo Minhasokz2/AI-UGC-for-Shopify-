@@ -32,9 +32,18 @@ function createImageOptimizerService({ shopsRepo, conversionJobsRepo, imageOptim
    * it), and creates the conversion job. Quota is checked (and consumed) AFTER
    * operation validation, so an invalid operation never burns a merchant's
    * daily allowance.
+   *
+   * `idempotencyKey` is checked FIRST, before quota is ever touched — a
+   * retried/double-clicked request for the same logical action must never
+   * burn a second unit of the scarce (default 10/day) free quota. If job
+   * creation itself throws after quota was already consumed (e.g. a
+   * Firestore write error), that unit is refunded rather than silently lost.
    */
-  async function requestOptimization({ shopDomain, shopifyProductId, imageUrl, operation }) {
+  async function requestOptimization({ shopDomain, shopifyProductId, imageUrl, operation, idempotencyKey }) {
     resolveOptimizerModel(operation);
+
+    const existing = await conversionJobsRepo.findByIdempotencyKey(shopDomain, idempotencyKey);
+    if (existing) return existing;
 
     const shop = await shopsRepo.getShop(shopDomain);
     const quota = await imageOptimizerQuota.checkAndConsumeQuota(shop ?? { id: shopDomain });
@@ -44,7 +53,28 @@ function createImageOptimizerService({ shopsRepo, conversionJobsRepo, imageOptim
       );
     }
 
-    return conversionJobsRepo.createConversionJob({ shopDomain, shopifyProductId, imageUrl, operation });
+    try {
+      const { job } = await conversionJobsRepo.claimAndCreateConversionJob(shopDomain, idempotencyKey, {
+        shopifyProductId,
+        imageUrl,
+        operation,
+      });
+      return job;
+    } catch (err) {
+      await imageOptimizerQuota.refundQuota(shop ?? { id: shopDomain });
+      throw err;
+    }
+  }
+
+  /**
+   * Gives back the quota unit consumed for a job that the worker has just
+   * marked failed — a merchant shouldn't lose their scarce daily allowance
+   * to a transient provider failure (fal.ai timeout/error), mirroring how a
+   * metered-plan shop is never charged credits for a failed generation.
+   */
+  async function refundQuotaForShop(shopDomain) {
+    const shop = await shopsRepo.getShop(shopDomain);
+    await imageOptimizerQuota.refundQuota(shop ?? { id: shopDomain });
   }
 
   /**
@@ -58,7 +88,7 @@ function createImageOptimizerService({ shopsRepo, conversionJobsRepo, imageOptim
     return { url };
   }
 
-  return { requestOptimization, runOptimizationJob };
+  return { requestOptimization, runOptimizationJob, refundQuotaForShop };
 }
 
 let singleton;

@@ -36,8 +36,31 @@ function createImageOptimizerUsageRepo({ db, FieldValue }) {
     });
   }
 
+  /**
+   * Compensates a quota unit that was consumed for a job that ultimately
+   * failed, or whose creation failed after quota was already consumed — the
+   * free daily quota is scarce (default 10/day), so a merchant shouldn't
+   * lose one to a transient provider failure the same way a metered-plan
+   * shop is never charged credits for a failed generation. Only decrements
+   * TODAY's count; if the stored date has already rolled over to a new UTC
+   * day, the quota already reset lazily and there is nothing to refund into.
+   * Clamped at 0 — never goes negative.
+   */
+  async function refundQuota(shopDomain) {
+    return db.runTransaction(async (tx) => {
+      const ref = usageCol.doc(shopDomain);
+      const snap = await tx.get(ref);
+      if (!snap.exists) return;
+      const data = snap.data();
+      const todayUtc = new Date().toISOString().slice(0, 10);
+      if (data.date !== todayUtc) return;
+      tx.update(ref, { countToday: Math.max(0, (data.countToday ?? 0) - 1) });
+    });
+  }
+
   return {
     checkAndIncrementQuota,
+    refundQuota,
   };
 }
 

@@ -1,7 +1,7 @@
 const express = require('express');
 const { z } = require('zod');
 const { wrapAsync } = require('../../middleware/wrapAsync');
-const { NotFoundError } = require('../../errors/AppError');
+const { NotFoundError, ValidationError } = require('../../errors/AppError');
 const { OPTIMIZER_OPERATIONS } = require('../../services/imageOptimizerService');
 
 const requestSchema = z.object({
@@ -20,7 +20,12 @@ function createImageOptimizerRouter({ imageOptimizerService, conversionJobsRepo,
     '/',
     wrapAsync(async (req, res) => {
       const parsed = requestSchema.parse(req.body);
-      const job = await imageOptimizerService.requestOptimization({ shopDomain: req.shopDomain, ...parsed });
+      const idempotencyKey = req.headers['idempotency-key'];
+      if (!idempotencyKey || typeof idempotencyKey !== 'string') {
+        throw new ValidationError('Missing required Idempotency-Key header');
+      }
+
+      const job = await imageOptimizerService.requestOptimization({ shopDomain: req.shopDomain, idempotencyKey, ...parsed });
       imageOptimizerWorker.enqueue(job).catch(() => {});
       res.status(201).json({ job });
     }),

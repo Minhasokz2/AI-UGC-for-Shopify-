@@ -62,6 +62,19 @@ function createImageOptimizerWorker({
       if (settled.skipped) {
         return { jobId: job.id, outcome: 'skipped', reason: 'lost_lease' };
       }
+
+      // The merchant shouldn't lose their scarce daily quota to a provider
+      // failure that wasn't their fault — give the unit back now that the
+      // job is durably marked failed. A refund error here is logged but
+      // never rethrown: the job is already correctly marked failed, and a
+      // missed refund is a much smaller harm than crashing the worker loop.
+      try {
+        await imageOptimizerService.refundQuotaForShop(job.shopDomain);
+      } catch (refundErr) {
+        logger.error({ err: refundErr, jobId: job.id, shopDomain: job.shopDomain }, 'Image Optimizer quota refund failed');
+        captureException(refundErr, { tags: { jobId: job.id, shopDomain: job.shopDomain } });
+      }
+
       return { jobId: job.id, outcome: 'failed' };
     }
   }

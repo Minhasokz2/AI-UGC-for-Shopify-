@@ -45,4 +45,33 @@ describe('services/imageOptimizerQuota', () => {
       expect(imageOptimizerUsageRepo.checkAndIncrementQuota).toHaveBeenCalledWith('shop-b.myshopify.com', expect.anything());
     });
   });
+
+  describe('refundQuota', () => {
+    it('delegates to the usage repo for a shop without the add-on', async () => {
+      const imageOptimizerUsageRepo = { refundQuota: vi.fn().mockResolvedValue(undefined) };
+      const quota = createImageOptimizerQuota({ imageOptimizerUsageRepo });
+
+      await quota.refundQuota({ id: 'shop-a', addOns: { imageOptimizer: false } });
+
+      expect(imageOptimizerUsageRepo.refundQuota).toHaveBeenCalledWith('shop-a');
+    });
+
+    it('is a no-op for a shop with the paid add-on — that path never consumed a counted unit', async () => {
+      const imageOptimizerUsageRepo = { refundQuota: vi.fn() };
+      const quota = createImageOptimizerQuota({ imageOptimizerUsageRepo });
+
+      await quota.refundQuota({ id: 'shop-a', addOns: { imageOptimizer: true } });
+
+      expect(imageOptimizerUsageRepo.refundQuota).not.toHaveBeenCalled();
+    });
+
+    it('falls back to shopDomain when no id field is present', async () => {
+      const imageOptimizerUsageRepo = { refundQuota: vi.fn().mockResolvedValue(undefined) };
+      const quota = createImageOptimizerQuota({ imageOptimizerUsageRepo });
+
+      await quota.refundQuota({ shopDomain: 'shop-b.myshopify.com' });
+
+      expect(imageOptimizerUsageRepo.refundQuota).toHaveBeenCalledWith('shop-b.myshopify.com');
+    });
+  });
 });

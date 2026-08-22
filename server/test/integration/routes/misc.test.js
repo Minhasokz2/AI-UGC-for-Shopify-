@@ -77,12 +77,24 @@ describe('integration: misc authenticated routes', () => {
     expect(second.body.referrals).toEqual([]);
   });
 
+  it('POST /api/image-optimizer requires an Idempotency-Key header (400 without one)', async () => {
+    const { app, db } = buildTestApp();
+    await seedShop(db);
+
+    const res = await request(app)
+      .post('/api/image-optimizer')
+      .send({ shopifyProductId: 'gid://shopify/Product/1', imageUrl: 'https://cdn/raw.png', operation: 'upscale_budget' });
+
+    expect(res.status).toBe(400);
+  });
+
   it('POST /api/image-optimizer requests an optimization job, respecting the daily quota', async () => {
     const { app, db } = buildTestApp();
     await seedShop(db);
 
     const res = await request(app)
       .post('/api/image-optimizer')
+      .set('Idempotency-Key', 'idem-1')
       .send({ shopifyProductId: 'gid://shopify/Product/1', imageUrl: 'https://cdn/raw.png', operation: 'upscale_budget' });
 
     expect(res.status).toBe(201);
@@ -92,6 +104,19 @@ describe('integration: misc authenticated routes', () => {
     expect(list.body.jobs).toHaveLength(1);
   });
 
+  it('POST /api/image-optimizer replays the SAME job (201, not a duplicate) for a repeated Idempotency-Key, without consuming a second unit of quota', async () => {
+    const { app, db } = buildTestApp();
+    await seedShop(db);
+    const body = { shopifyProductId: 'gid://shopify/Product/1', imageUrl: 'https://cdn/raw.png', operation: 'upscale_budget' };
+
+    const first = await request(app).post('/api/image-optimizer').set('Idempotency-Key', 'idem-1').send(body);
+    const second = await request(app).post('/api/image-optimizer').set('Idempotency-Key', 'idem-1').send(body);
+
+    expect(first.body.job.id).toBe(second.body.job.id);
+    const usage = (await db.collection('image_optimizer_usage').doc(SHOP).get()).data();
+    expect(usage.countToday).toBe(1);
+  });
+
   it('POST /api/image-optimizer returns 429 once the free daily quota is exhausted', async () => {
     const { app, db } = buildTestApp();
     await seedShop(db);
@@ -99,6 +124,7 @@ describe('integration: misc authenticated routes', () => {
 
     const res = await request(app)
       .post('/api/image-optimizer')
+      .set('Idempotency-Key', 'idem-1')
       .send({ shopifyProductId: 'gid://shopify/Product/1', imageUrl: 'https://cdn/raw.png', operation: 'retouch' });
 
     expect(res.status).toBe(429);
