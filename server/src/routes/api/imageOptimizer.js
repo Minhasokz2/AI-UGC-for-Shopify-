@@ -11,9 +11,9 @@ const requestSchema = z.object({
 });
 
 /**
- * @param {{ imageOptimizerService: object, conversionJobsRepo: object }} deps
+ * @param {{ imageOptimizerService: object, conversionJobsRepo: object, imageOptimizerWorker: object }} deps
  */
-function createImageOptimizerRouter({ imageOptimizerService, conversionJobsRepo }) {
+function createImageOptimizerRouter({ imageOptimizerService, conversionJobsRepo, imageOptimizerWorker }) {
   const router = express.Router();
 
   router.post(
@@ -21,6 +21,7 @@ function createImageOptimizerRouter({ imageOptimizerService, conversionJobsRepo 
     wrapAsync(async (req, res) => {
       const parsed = requestSchema.parse(req.body);
       const job = await imageOptimizerService.requestOptimization({ shopDomain: req.shopDomain, ...parsed });
+      imageOptimizerWorker.enqueue(job).catch(() => {});
       res.status(201).json({ job });
     }),
   );

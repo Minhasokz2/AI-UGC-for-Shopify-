@@ -34,18 +34,24 @@ const { createImageOptimizerService } = require('./services/imageOptimizerServic
 const { createNurtureEmailService } = require('./services/nurtureEmailService');
 const { createWebhookHandlers } = require('./services/webhookHandlers');
 const { seedAllowedModels } = require('./services/allowedModelsSeedData');
+const { createJobWorker } = require('./workers/jobWorker');
+const { createImageOptimizerWorker } = require('./workers/imageOptimizerWorker');
 
 /**
- * @param {{ db: object, FieldValue: object, shopify: object, cloudinaryService?: object, googleAuth?: object, brandStyle?: object, emailService?: object, logger?: object }} opts
+ * @param {{ db: object, FieldValue: object, shopify: object, workerId?: string, cloudinaryService?: object, googleAuth?: object, brandStyle?: object, emailService?: object, logger?: object }} opts
  *   `shopify` is a getShopify()-shaped object: `.api.clients.Graphql` and
  *   `.config.sessionStorage` are both read from it. The four service
  *   overrides let tests swap in a mock without touching real SDKs; each
- *   defaults to the real module's exported functions.
+ *   defaults to the real module's exported functions. `workerId` identifies
+ *   THIS process to the lease-claim mechanism — defaults to a value that's
+ *   stable within the process but unique across a redeploy, so a route that
+ *   fires enqueue() and this same process's worker agree on who's claiming.
  */
 function buildDependencies({
   db,
   FieldValue,
   shopify,
+  workerId = `pid-${process.pid}-${Date.now()}`,
   cloudinaryService = require('./services/cloudinaryService'),
   googleAuth = require('./services/googleAuth'),
   brandStyle = require('./services/brandStyle'),
@@ -101,6 +107,9 @@ function buildDependencies({
   });
   const webhookHandlers = createWebhookHandlers({ shopsRepo, productsRepo });
 
+  const jobWorker = createJobWorker({ jobsRepo, templatesRepo, allowedModelsRepo, credits, workerId, logger });
+  const imageOptimizerWorker = createImageOptimizerWorker({ conversionJobsRepo, imageOptimizerService, workerId, logger });
+
   return {
     db,
     jobsRepo,
@@ -127,6 +136,8 @@ function buildDependencies({
     imageOptimizerService,
     nurtureEmailService,
     webhookHandlers,
+    jobWorker,
+    imageOptimizerWorker,
     cloudinaryService,
     googleAuth,
     brandStyle,

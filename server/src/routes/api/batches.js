@@ -27,9 +27,9 @@ const createBatchSchema = z.object({
 });
 
 /**
- * @param {{ jobsRepo: object, batchesRepo: object, templatesRepo: object, allowedModelsRepo: object, credits: object }} deps
+ * @param {{ jobsRepo: object, batchesRepo: object, templatesRepo: object, allowedModelsRepo: object, credits: object, jobWorker: object }} deps
  */
-function createBatchesRouter({ jobsRepo, batchesRepo, templatesRepo, allowedModelsRepo, credits }) {
+function createBatchesRouter({ jobsRepo, batchesRepo, templatesRepo, allowedModelsRepo, credits, jobWorker }) {
   const router = express.Router();
 
   router.post(
@@ -84,6 +84,7 @@ function createBatchesRouter({ jobsRepo, batchesRepo, templatesRepo, allowedMode
           idempotencyKey: `${idempotencyKey}:${i}`,
         });
         jobs.push(job);
+        jobWorker.enqueue(job).catch(() => {});
       }
 
       res.status(201).json({ batch, jobs });

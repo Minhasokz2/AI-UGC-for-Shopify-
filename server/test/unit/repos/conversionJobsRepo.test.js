@@ -182,4 +182,17 @@ describe('repos/conversionJobsRepo', () => {
       expect(succeededOnly.map((j) => j.id)).toEqual(['job1']);
     });
   });
+
+  describe('queryResumableJobs', () => {
+    it('returns only pending/processing jobs, not succeeded/failed', async () => {
+      const { db, repo } = makeRepo();
+      await seedJob(db, 'a', { status: 'pending', createdAt: FakeTimestamp.fromMillis(1) });
+      await seedJob(db, 'b', { status: 'processing', createdAt: FakeTimestamp.fromMillis(2) });
+      await seedJob(db, 'c', { status: 'succeeded', createdAt: FakeTimestamp.fromMillis(3) });
+
+      const resumable = await repo.queryResumableJobs();
+
+      expect(resumable.map((j) => j.id).sort()).toEqual(['a', 'b']);
+    });
+  });
 });

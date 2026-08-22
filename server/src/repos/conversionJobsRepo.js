@@ -117,6 +117,14 @@ function createConversionJobsRepo({ db, FieldValue, leaseTimeoutMs = JOB_LEASE_T
     return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
   }
 
+  /** Boot-time resume, mirroring jobsRepo.queryResumableJobs. */
+  async function queryResumableJobs({ cursor, limit = 200 } = {}) {
+    let query = jobsCol.where('status', 'in', ['pending', 'processing']).orderBy('createdAt', 'asc').limit(limit);
+    if (cursor !== undefined) query = query.startAfter(cursor);
+    const snap = await query.get();
+    return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  }
+
   return {
     getById,
     createConversionJob,
@@ -125,6 +133,7 @@ function createConversionJobsRepo({ db, FieldValue, leaseTimeoutMs = JOB_LEASE_T
     settleConversionSuccess,
     settleConversionFailure,
     queryByShop,
+    queryResumableJobs,
   };
 }
 

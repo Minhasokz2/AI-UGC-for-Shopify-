@@ -65,7 +65,7 @@ function createFakeShopify({ session = { shop: 'test-shop.myshopify.com', access
 }
 
 /**
- * @param {{ shopify?: object, cloudinaryService?: object, googleAuth?: object, brandStyle?: object, emailService?: object }} [overrides]
+ * @param {{ shopify?: object, cloudinaryService?: object, googleAuth?: object, brandStyle?: object, emailService?: object, jobWorker?: object, imageOptimizerWorker?: object }} [overrides]
  * @returns {{ app: object, db: object, deps: object }}
  */
 function buildTestApp(overrides = {}) {
@@ -81,6 +81,15 @@ function buildTestApp(overrides = {}) {
     brandStyle: overrides.brandStyle,
     emailService: overrides.emailService,
   });
+
+  // Real workers make real outbound calls to fal.ai/WaveSpeed/etc as soon as
+  // a job-creation route fires jobWorker.enqueue() — never appropriate for a
+  // test, which has no live credentials and must never touch the network.
+  // Defaulted to inert no-ops here; a test asserting on worker behavior
+  // passes its own `jobWorker`/`imageOptimizerWorker` override (see
+  // test/unit/workers/*.test.js for that lower-level, non-HTTP coverage).
+  deps.jobWorker = overrides.jobWorker || { enqueue: async () => {}, processJob: async () => {}, resumeFromFirestore: async () => 0 };
+  deps.imageOptimizerWorker = overrides.imageOptimizerWorker || { enqueue: async () => {}, processJob: async () => {}, resumeFromFirestore: async () => 0 };
 
   const app = createApp(deps);
   return { app, db, deps };

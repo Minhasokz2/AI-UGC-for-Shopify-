@@ -58,7 +58,7 @@ async function resolveAndEstimate(job, { templatesRepo, allowedModelsRepo }) {
 /**
  * @param {{ jobsRepo: object, templatesRepo: object, allowedModelsRepo: object, credits: object }} deps
  */
-function createJobsRouter({ jobsRepo, templatesRepo, allowedModelsRepo, credits }) {
+function createJobsRouter({ jobsRepo, templatesRepo, allowedModelsRepo, credits, jobWorker }) {
   const router = express.Router();
 
   router.post(
@@ -93,6 +93,13 @@ function createJobsRouter({ jobsRepo, templatesRepo, allowedModelsRepo, credits 
         publishStatus: 'unpublished',
         idempotencyKey,
       });
+
+      // Fire-and-forget: starts processing immediately rather than waiting for
+      // the next poll cycle. A replay (isNew:false) or a process that dies
+      // right after this call is still safe — resumeFromFirestore picks up
+      // anything left pending on the next boot, and the worker's own claim
+      // transaction makes a duplicate enqueue() a no-op.
+      if (isNew) jobWorker.enqueue(job).catch(() => {});
 
       res.status(isNew ? 201 : 200).json({ job });
     }),
