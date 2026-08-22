@@ -18,7 +18,11 @@ scripts/    seedTemplates.js, seedAllowedModels.js, sweepNurture.js, sweepBillin
 Deployment target is a **single Render web service**: `server/` serves its own API and the built
 `web/dist` (at `/`) and `admin/dist` (at `/admin`) static bundles from the same Express app and
 domain — see `server/src/app.js` for the exact route/middleware ordering, and `render.yaml` /
-`build.sh` for the deploy wiring.
+`build.sh` for the deploy wiring. `marketing/` is deliberately NOT served by this same app —
+a public marketing site belongs on the plain root domain (e.g. `motionart.app`), while
+`SHOPIFY_APP_URL`/the Render service's domain is the *embedded app's* URL (typically a subdomain).
+Deploy `marketing/dist` to its own static host (a second free Render Static Site, Vercel, Netlify,
+or similar) — this is a manual step `build.sh`/`render.yaml` don't perform.
 
 ## Getting started
 
@@ -44,7 +48,7 @@ npm run seed:models      # upserts the Allowed Models catalog (also available as
 - **Auth**: Shopify-managed installation (scopes declared in `shopify.app.toml`, not requested via
   OAuth) + token exchange (not the classic OAuth redirect) for embedded session handling. See
   `server/src/config/shopify.js` and `server/src/middleware/auth.js`.
-- **Data**: Firestore, via `firebase-admin`. See `scripts/createFirestoreIndexes.md` for the
+- **Data**: Firestore, via `firebase-admin`. See `server/docs/createFirestoreIndexes.md` for the
   composite indexes the query patterns require.
 - **Job processing**: an in-process worker (`server/src/workers/jobWorker.js`) using `p-limit` for
   per-shop and global concurrency caps — no Redis/BullMQ. Jobs are claimed via a Firestore-
@@ -79,3 +83,7 @@ business logic is verified against mocked SDKs / an in-memory fake Firestore. Be
    `server/src/config/shopify.js` rather than `LATEST_API_VERSION` (which no longer exists in the
    SDK). Bump it deliberately each quarter as Shopify ships new stable versions — check the SDK's
    actual current export before bumping.
+5. **`marketing/` hosting**: `build.sh` builds `marketing/dist` but nothing deploys it — it isn't
+   served by the Render web service (see "Monorepo layout" above for why). Point a separate static
+   host at `marketing/dist` and update the Shopify App Store listing / any "learn more" links to
+   that domain once it exists.
