@@ -65,6 +65,35 @@ describe('integration: /api/jobs', () => {
       expect(res.body.error.code).toBe('INSUFFICIENT_CREDITS');
     });
 
+    it('returns 429 when an unlimited-plan shop has already hit its fair-use cap for the month', async () => {
+      const { UNLIMITED_PLAN } = require('../../../src/services/billingPacks');
+      const { app, db } = buildTestApp();
+      const monthUtc = new Date().toISOString().slice(0, 7);
+      await seedShop(db, { plan: 'unlimited', unlimitedUsage: { month: monthUtc, creditsThisMonth: UNLIMITED_PLAN.fairUseCreditsPerMonth } });
+      await db.collection('templates').doc('tpl-1').set({ category: 'scene', modelRole: 'default_scene', creditCost: 3 });
+
+      const res = await request(app)
+        .post('/api/jobs')
+        .set('Idempotency-Key', 'idem-unlimited-1')
+        .send({ contentType: 'scene', templateId: 'tpl-1', sourceImageUrl: 'https://cdn/raw.png' });
+
+      expect(res.status).toBe(429);
+      expect(res.body.error.code).toBe('QUOTA_EXCEEDED');
+    });
+
+    it('an unlimited-plan shop under its fair-use cap creates the job normally (201)', async () => {
+      const { app, db } = buildTestApp();
+      await seedShop(db, { plan: 'unlimited', creditBalance: 0 });
+      await db.collection('templates').doc('tpl-1').set({ category: 'scene', modelRole: 'default_scene', creditCost: 3 });
+
+      const res = await request(app)
+        .post('/api/jobs')
+        .set('Idempotency-Key', 'idem-unlimited-2')
+        .send({ contentType: 'scene', templateId: 'tpl-1', sourceImageUrl: 'https://cdn/raw.png' });
+
+      expect(res.status).toBe(201);
+    });
+
     it('returns 422 for a ugc job whose persona is not an adult, before any credits are checked', async () => {
       const { app, db } = buildTestApp();
       await seedShop(db, { creditBalance: 0 }); // would also fail credits — persona must be checked first

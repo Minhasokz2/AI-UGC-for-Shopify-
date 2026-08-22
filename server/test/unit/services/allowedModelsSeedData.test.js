@@ -1,5 +1,6 @@
 const { createFakeFirestore } = require('../../helpers/fakeFirestore');
 const { ALLOWED_MODELS, computeImageCountConstraint, seedAllowedModels } = require('../../../src/services/allowedModelsSeedData');
+const { WORST_CASE_REVENUE_PER_CREDIT_USD, MARGIN_TARGET } = require('../../../src/services/billingPacks');
 
 describe('services/allowedModelsSeedData', () => {
   describe('computeImageCountConstraint', () => {
@@ -64,6 +65,14 @@ describe('services/allowedModelsSeedData', () => {
       const tryOn = ALLOWED_MODELS.find((m) => m.role === 'try_on');
       expect(tryOn.imageCountConstraint).toEqual({ min: 2, max: 2 });
       expect(tryOn.eligibleFlows).toEqual(['custom']);
+    });
+
+    it('every model clears MARGIN_TARGET even at WORST_CASE_REVENUE_PER_CREDIT_USD — the hard guarantee behind billingPacks.js, not just an average', () => {
+      for (const model of ALLOWED_MODELS) {
+        const costPerCreditUsd = model.actualCostUsd / model.creditCost;
+        const marginAtWorstCase = 1 - costPerCreditUsd / WORST_CASE_REVENUE_PER_CREDIT_USD;
+        expect(marginAtWorstCase).toBeGreaterThanOrEqual(MARGIN_TARGET);
+      }
     });
   });
 

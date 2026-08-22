@@ -2,7 +2,8 @@ const { createFakeFirestore, FieldValue } = require('../../helpers/fakeFirestore
 const { createCreditsService } = require('../../../src/services/credits');
 const { createTemplatesRepo } = require('../../../src/repos/templatesRepo');
 const { createAllowedModelsRepo } = require('../../../src/repos/allowedModelsRepo');
-const { NotFoundError, InsufficientCreditsError, ValidationError } = require('../../../src/errors/AppError');
+const { NotFoundError, InsufficientCreditsError, QuotaExceededError, ValidationError } = require('../../../src/errors/AppError');
+const { UNLIMITED_PLAN } = require('../../../src/services/billingPacks');
 
 function makeService() {
   const db = createFakeFirestore();
@@ -109,7 +110,7 @@ describe('services/credits', () => {
       );
     });
 
-    it('unlimited-plan shops always pass regardless of balance', () => {
+    it('unlimited-plan shops ignore creditBalance entirely (still bounded by the fair-use cap below)', () => {
       const { credits } = makeService();
       expect(() => credits.assertSufficientCredits({ plan: 'unlimited', creditBalance: 0 }, 999)).not.toThrow();
     });
@@ -117,6 +118,34 @@ describe('services/credits', () => {
     it('treats a missing creditBalance as 0', () => {
       const { credits } = makeService();
       expect(() => credits.assertSufficientCredits({ plan: 'metered' }, 1)).toThrow(InsufficientCreditsError);
+    });
+
+    describe('unlimited-plan fair-use cap', () => {
+      it('passes when this month\'s usage plus the new request stays within the cap', () => {
+        const { credits } = makeService();
+        const shop = { plan: 'unlimited', unlimitedUsage: { month: '2026-08', creditsThisMonth: UNLIMITED_PLAN.fairUseCreditsPerMonth - 10 } };
+        expect(() => credits.assertSufficientCredits(shop, 10)).not.toThrow();
+      });
+
+      it('throws QuotaExceededError once this month\'s usage plus the new request would exceed the cap', () => {
+        const { credits } = makeService();
+        const shop = { plan: 'unlimited', unlimitedUsage: { month: '2026-08', creditsThisMonth: UNLIMITED_PLAN.fairUseCreditsPerMonth - 5 } };
+        expect(() => credits.assertSufficientCredits(shop, 10)).toThrow(QuotaExceededError);
+      });
+
+      it('a shop with no unlimitedUsage yet (never settled a job) starts at 0 used', () => {
+        const { credits } = makeService();
+        expect(() => credits.assertSufficientCredits({ plan: 'unlimited' }, UNLIMITED_PLAN.fairUseCreditsPerMonth)).not.toThrow();
+        expect(() => credits.assertSufficientCredits({ plan: 'unlimited' }, UNLIMITED_PLAN.fairUseCreditsPerMonth + 1)).toThrow(
+          QuotaExceededError,
+        );
+      });
+
+      it('ignores a stale month\'s usage — the cap resets lazily rather than accumulating across months', () => {
+        const { credits } = makeService();
+        const staleUsage = { month: '2020-01', creditsThisMonth: UNLIMITED_PLAN.fairUseCreditsPerMonth };
+        expect(() => credits.assertSufficientCredits({ plan: 'unlimited', unlimitedUsage: staleUsage }, 10)).not.toThrow();
+      });
     });
   });
 });

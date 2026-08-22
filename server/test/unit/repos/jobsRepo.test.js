@@ -218,6 +218,40 @@ describe('repos/jobsRepo', () => {
       expect(ledger.empty).toBe(true);
     });
 
+    it('unlimited-plan shops accumulate the fair-use monthly counter credits.js gates on', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-15T00:00:00Z'));
+      try {
+        const { db, repo } = makeRepo();
+        await seedShop(db, 'shop-a', { creditBalance: 0, plan: 'unlimited' });
+        await seedJob(db, 'job1', { status: 'processing', shopDomain: 'shop-a', workerId: 'workerA' });
+
+        await repo.settleJobSuccess('job1', { workerId: 'workerA', resultVariations: [{ url: 'a' }], recomputeCost: async () => 4 });
+
+        const shop = (await db.collection('shops').doc('shop-a').get()).data();
+        expect(shop.unlimitedUsage).toEqual({ month: '2026-08', creditsThisMonth: 4 });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('resets the unlimited fair-use counter on a new UTC month rather than accumulating across months', async () => {
+      vi.useFakeTimers();
+      try {
+        const { db, repo } = makeRepo();
+        await seedShop(db, 'shop-a', { creditBalance: 0, plan: 'unlimited', unlimitedUsage: { month: '2026-07', creditsThisMonth: 5000 } });
+        await seedJob(db, 'job1', { status: 'processing', shopDomain: 'shop-a', workerId: 'workerA' });
+
+        vi.setSystemTime(new Date('2026-08-01T00:05:00Z'));
+        await repo.settleJobSuccess('job1', { workerId: 'workerA', resultVariations: [{ url: 'a' }], recomputeCost: async () => 4 });
+
+        const shop = (await db.collection('shops').doc('shop-a').get()).data();
+        expect(shop.unlimitedUsage).toEqual({ month: '2026-08', creditsThisMonth: 4 });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('re-settling an already-succeeded job is idempotent and never double-charges', async () => {
       const { db, repo } = makeRepo();
       await seedShop(db, 'shop-a', { creditBalance: 10, plan: 'metered' });

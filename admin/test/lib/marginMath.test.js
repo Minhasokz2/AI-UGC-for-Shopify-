@@ -6,6 +6,7 @@ import {
   marginBadgeTone,
   computeMarginRange,
   computeMarginRangeForModel,
+  MARGIN_TARGET_PCT,
 } from '../../src/lib/marginMath';
 
 // Real pack shape as returned by GET /admin/api/pricing-config, computed by
@@ -60,14 +61,15 @@ describe('computeMarginForPack — boundary cases', () => {
     const pack = { monthlyRevenuePerCreditCents: 10 };
     const margin = computeMarginForPack(pack, 10);
     expect(margin).toBe(0);
-    expect(marginBadgeTone(margin)).toBe('warning'); // 0 is not < 0, but is < 20
+    expect(marginBadgeTone(margin)).toBe('warning'); // 0 is not < 0, but is < MARGIN_TARGET_PCT (70)
   });
 
-  it('is exactly 20% at the warning/success boundary', () => {
+  it('is exactly at MARGIN_TARGET_PCT (70%), the warning/success boundary', () => {
     const pack = { monthlyRevenuePerCreditCents: 10 };
-    const margin = computeMarginForPack(pack, 8); // (10-8)/10*100 = 20
-    expect(margin).toBe(20);
-    expect(marginBadgeTone(margin)).toBe('success'); // 20 is not < 20
+    const margin = computeMarginForPack(pack, 3); // (10-3)/10*100 = 70
+    expect(margin).toBe(70);
+    expect(margin).toBe(MARGIN_TARGET_PCT);
+    expect(marginBadgeTone(margin)).toBe('success'); // 70 is not < 70
   });
 
   it('is negative when cost exceeds revenue-per-credit', () => {
@@ -77,10 +79,10 @@ describe('computeMarginForPack — boundary cases', () => {
     expect(marginBadgeTone(margin)).toBe('critical');
   });
 
-  it('is just under the 20% boundary (19.999...%) and still reads warning', () => {
+  it('is just under the 70% boundary (69.999...%) and still reads warning', () => {
     const pack = { monthlyRevenuePerCreditCents: 10 };
-    const margin = computeMarginForPack(pack, 8.0001); // just over 8 -> just under 20%
-    expect(margin).toBeLessThan(20);
+    const margin = computeMarginForPack(pack, 3.0001); // just over 3 -> just under 70%
+    expect(margin).toBeLessThan(70);
     expect(marginBadgeTone(margin)).toBe('warning');
   });
 
@@ -106,9 +108,9 @@ describe('marginBadgeTone', () => {
     [-100, 'critical'],
     [-0.01, 'critical'],
     [0, 'warning'],
-    [19.99, 'warning'],
-    [20, 'success'],
-    [20.01, 'success'],
+    [69.99, 'warning'],
+    [70, 'success'],
+    [70.01, 'success'],
     [100, 'success'],
   ])('marginBadgeTone(%f) -> %s', (input, expected) => {
     expect(marginBadgeTone(input)).toBe(expected);
@@ -116,7 +118,7 @@ describe('marginBadgeTone', () => {
 });
 
 describe('computeMarginRange — real pricing-config numbers', () => {
-  it('computes monthly margin at every pack for a healthily-priced model ($0.05/credit cost)', () => {
+  it('computes monthly margin at every pack for a model that is still under the 70% target at Scale ($0.05/credit cost)', () => {
     const costPerCreditCents = computeCostPerCreditCents(0.05, 1); // 5 cents/credit
     const { entries, worstCase } = computeMarginRange(REAL_PACKS, costPerCreditCents, 'monthly');
 
@@ -130,9 +132,10 @@ describe('computeMarginRange — real pricing-config numbers', () => {
     // (6.6 - 5) / 6.6 * 100
     expect(byId.scale.marginPct).toBeCloseTo(24.242424242424244, 10);
 
-    expect(byId.starter.tone).toBe('success');
-    expect(byId.growth.tone).toBe('success');
-    expect(byId.scale.tone).toBe('success');
+    // All three are below MARGIN_TARGET_PCT (70) at this cost level.
+    expect(byId.starter.tone).toBe('warning');
+    expect(byId.growth.tone).toBe('warning');
+    expect(byId.scale.tone).toBe('warning');
 
     // Scale has the lowest monthly revenue-per-credit rate (6.6), so for a
     // fixed cost it is always the worst-case margin.
@@ -140,7 +143,20 @@ describe('computeMarginRange — real pricing-config numbers', () => {
     expect(worstCase.marginPct).toBeCloseTo(24.242424242424244, 10);
   });
 
-  it('surfaces a worst-case margin under the 20% warning threshold at Scale for a costlier model ($0.06/credit)', () => {
+  it('reads success at every pack for a model actually priced to clear the 70% target ($0.01/credit cost)', () => {
+    const costPerCreditCents = computeCostPerCreditCents(0.01, 1); // 1 cent/credit
+    const { entries, worstCase } = computeMarginRange(REAL_PACKS, costPerCreditCents, 'monthly');
+    const byId = Object.fromEntries(entries.map((e) => [e.packId, e]));
+
+    // (6.6 - 1) / 6.6 * 100 = 84.848...% — clears 70 even at Scale, the worst case.
+    expect(byId.scale.marginPct).toBeCloseTo(84.84848484848484, 10);
+    expect(byId.starter.tone).toBe('success');
+    expect(byId.growth.tone).toBe('success');
+    expect(byId.scale.tone).toBe('success');
+    expect(worstCase.packId).toBe('scale');
+  });
+
+  it('surfaces a worst-case margin under the 70% warning threshold at Scale for a costlier model ($0.06/credit)', () => {
     const costPerCreditCents = computeCostPerCreditCents(0.06, 1); // 6 cents/credit
     const { worstCase } = computeMarginRange(REAL_PACKS, costPerCreditCents, 'monthly');
 
@@ -183,17 +199,17 @@ describe('computeMarginRange — real pricing-config numbers', () => {
 });
 
 describe('computeMarginRangeForModel — combining a model object with pricing-config', () => {
-  it('flags the correct worst-case margin for a well-priced model regardless of needsPriceReview', () => {
+  it('flags the correct worst-case margin for a well-priced model (clears 70%) regardless of needsPriceReview', () => {
     const model = {
       id: 'seedream-scene-v1',
       label: 'Seedream Scene v1',
-      actualCostUsd: 0.05,
+      actualCostUsd: 0.01,
       creditCost: 1,
       needsPriceReview: true, // math must not care about this flag either way
     };
     const { worstCase } = computeMarginRangeForModel(model, REAL_PACKS, 'monthly');
     expect(worstCase.packId).toBe('scale');
-    expect(worstCase.marginPct).toBeCloseTo(24.242424242424244, 10);
+    expect(worstCase.marginPct).toBeCloseTo(84.84848484848484, 10);
     expect(worstCase.tone).toBe('success');
     // needsPriceReview is orthogonal data the UI combines with this result —
     // marginMath itself never reads or reasons about it.

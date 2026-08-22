@@ -10,6 +10,17 @@
 // `paramNamesUnconfirmed: true`. Re-verify against `fal.ai/models/{endpoint}/api`
 // before real spend is at risk (see README's "Required manual steps" section).
 //
+// Every model's creditCost is sized to clear services/billingPacks.js's
+// MARGIN_TARGET (70%) even in the worst case — WORST_CASE_REVENUE_PER_CREDIT_USD
+// (the Scale pack billed annually, currently $0.055/credit) fully spent on that
+// one model. The value each carries is `billingPacks.minCreditCostForMargin(actualCostUsd)`
+// hand-verified at authoring time — not computed live at seed time — so a
+// deliberate admin override in Firestore is never silently overwritten (see
+// seedAllowedModels' insert-if-missing behavior below); a change to actualCostUsd
+// or to the pack pricing means recomputing and updating creditCost by hand.
+// test/unit/services/allowedModelsSeedData.test.js asserts every entry still
+// clears the target so this can't silently drift.
+//
 // `services/fal.js`, `services/extendedModels.js`, and `services/textToImageModels.js`
 // derive their exported catalogs (CUSTOM_SCENE_MODELS, EXTENDED_ALLOWED_MODELS,
 // TEXT_TO_IMAGE_MODELS) by filtering THIS array by `role`/`category` rather than
@@ -77,7 +88,7 @@ const ALLOWED_MODELS = [
     imageParam: 'image_url',
     outputField: 'image',
     supportsBatch: false,
-    creditCost: 1,
+    creditCost: 2, // minCreditCostForMargin(0.018) — guarantees >=70% margin worst-case
     actualCostUsd: 0.018,
     needsPriceReview: false,
   }),
@@ -95,7 +106,7 @@ const ALLOWED_MODELS = [
     imageParam: 'image_url',
     outputField: 'images',
     supportsBatch: false,
-    creditCost: 1,
+    creditCost: 2, // minCreditCostForMargin(0.025) — guarantees >=70% margin worst-case
     actualCostUsd: 0.025,
     needsPriceReview: false,
   }),
@@ -111,7 +122,7 @@ const ALLOWED_MODELS = [
     imageParam: 'image_url',
     outputField: 'images',
     supportsBatch: false,
-    creditCost: 2,
+    creditCost: 3, // minCreditCostForMargin(0.04) — guarantees >=70% margin worst-case
     actualCostUsd: 0.04,
     needsPriceReview: false,
   }),
@@ -147,7 +158,7 @@ const ALLOWED_MODELS = [
     maxImages: 2,
     outputField: 'images',
     supportsBatch: false,
-    creditCost: 2,
+    creditCost: 3, // minCreditCostForMargin(0.039) — guarantees >=70% margin worst-case
     actualCostUsd: 0.039,
     needsPriceReview: false,
   }),
@@ -165,7 +176,7 @@ const ALLOWED_MODELS = [
     maxImages: 6, // API reportedly supports up to 14; capped in our UI for a manageable picker
     outputField: 'images',
     supportsBatch: false,
-    creditCost: 6,
+    creditCost: 10, // minCreditCostForMargin(0.15) — guarantees >=70% margin worst-case
     actualCostUsd: 0.15, // base resolution; 4K variant is ~2x — re-verify before enabling 4K output
     needsPriceReview: false,
   }),
@@ -183,7 +194,7 @@ const ALLOWED_MODELS = [
     imageParam: 'image_url',
     outputField: 'image',
     supportsBatch: false,
-    creditCost: 2,
+    creditCost: 3, // minCreditCostForMargin(0.04) — guarantees >=70% margin worst-case
     actualCostUsd: 0.04,
     needsPriceReview: false,
   }),
@@ -265,7 +276,7 @@ const ALLOWED_MODELS = [
     imageParam: { person: 'model_image_url', garment: 'garment_image_url' },
     outputField: 'images',
     supportsBatch: false,
-    creditCost: 4,
+    creditCost: 5, // minCreditCostForMargin(0.075) — guarantees >=70% margin worst-case
     actualCostUsd: 0.075,
     needsPriceReview: false,
     paramNamesUnconfirmed: true, // exact JSON keys inferred from UI labels, not a directly observed schema
@@ -298,7 +309,7 @@ const ALLOWED_MODELS = [
     inputShape: 'prompt_only',
     outputField: 'images',
     supportsBatch: true,
-    creditCost: 1,
+    creditCost: 2, // minCreditCostForMargin(0.025) — guarantees >=70% margin worst-case
     actualCostUsd: 0.025,
     needsPriceReview: false,
   }),
@@ -313,7 +324,7 @@ const ALLOWED_MODELS = [
     inputShape: 'prompt_only',
     outputField: 'images',
     supportsBatch: true,
-    creditCost: 2,
+    creditCost: 3, // minCreditCostForMargin(0.04) — guarantees >=70% margin worst-case
     actualCostUsd: 0.04,
     needsPriceReview: false,
   }),
@@ -328,7 +339,7 @@ const ALLOWED_MODELS = [
     inputShape: 'prompt_only',
     outputField: 'images',
     supportsBatch: true,
-    creditCost: 3,
+    creditCost: 6, // minCreditCostForMargin(0.09) — guarantees >=70% margin worst-case
     actualCostUsd: 0.09,
     needsPriceReview: false,
   }),
@@ -346,7 +357,7 @@ const ALLOWED_MODELS = [
     imageParam: 'image_url',
     outputField: 'video',
     supportsBatch: false,
-    creditCost: 8, // ~5s clip at 480p ($0.05/s)
+    creditCost: 16, // ~5s clip at 480p ($0.05/s); minCreditCostForMargin(0.25) — guarantees >=70% margin worst-case
     actualCostUsd: 0.25,
     needsPriceReview: false,
   }),
@@ -362,7 +373,7 @@ const ALLOWED_MODELS = [
     imageParam: 'image_url',
     outputField: 'video',
     supportsBatch: false,
-    creditCost: 12, // 5s clip flat price
+    creditCost: 22, // 5s clip flat price; minCreditCostForMargin(0.35) — guarantees >=70% margin worst-case
     actualCostUsd: 0.35,
     needsPriceReview: false,
   }),
@@ -378,7 +389,7 @@ const ALLOWED_MODELS = [
     imageParam: 'image_url',
     outputField: 'video',
     supportsBatch: false,
-    creditCost: 40, // ~5s clip at $0.40/s with audio
+    creditCost: 122, // ~5s clip at $0.40/s with audio; minCreditCostForMargin(2.0) — guarantees >=70% margin worst-case
     actualCostUsd: 2.0,
     needsPriceReview: false,
   }),

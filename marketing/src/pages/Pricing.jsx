@@ -92,7 +92,10 @@ export default function Pricing() {
                 {formatCentsToDollars(pricing.unlimitedPlan.monthlyPriceCents)}
                 <span style={{ fontSize: '0.9rem', fontWeight: 400 }}>/mo</span>
               </div>
-              <p className="pricing-card__credits">Unlimited generations, flat monthly rate.</p>
+              <p className="pricing-card__credits">
+                Unlimited generations, flat monthly rate — fair use up to{' '}
+                {pricing.unlimitedPlan.fairUseCreditsPerMonth?.toLocaleString()} credits/mo.
+              </p>
             </div>
           )}
         </>

@@ -22,7 +22,7 @@ const PRICING_PAYLOAD = {
       annualCredits: 2400,
     },
   ],
-  unlimitedPlan: { id: 'unlimited', label: 'Unlimited', monthlyPriceCents: 9900 },
+  unlimitedPlan: { id: 'unlimited', label: 'Unlimited', monthlyPriceCents: 9900, fairUseCreditsPerMonth: 5436 },
 };
 
 function renderPricing() {

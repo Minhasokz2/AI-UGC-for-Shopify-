@@ -4,7 +4,19 @@
 // trusting a job-creation-time cached cost estimate, only ever the template/
 // model record's CURRENT creditCost, re-read at the moment of settlement.
 
-const { NotFoundError, InsufficientCreditsError, ValidationError } = require('../errors/AppError');
+const { NotFoundError, InsufficientCreditsError, QuotaExceededError, ValidationError } = require('../errors/AppError');
+const { UNLIMITED_PLAN } = require('./billingPacks');
+
+/** UTC "YYYY-MM" for the fair-use cap's lazy monthly reset (mirrors imageOptimizerUsageRepo's daily reset). */
+function currentMonthUtc() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+/** @param {{ unlimitedUsage?: { month?: string, creditsThisMonth?: number } }} shop */
+function unlimitedCreditsUsedThisMonth(shop) {
+  if (shop.unlimitedUsage?.month !== currentMonthUtc()) return 0;
+  return shop.unlimitedUsage.creditsThisMonth ?? 0;
+}
 
 const TEMPLATES_COLLECTION = 'templates';
 const ALLOWED_MODELS_COLLECTION = 'allowed_models';
@@ -63,14 +75,25 @@ function createCreditsService({ db, templatesRepo, allowedModelsRepo }) {
   }
 
   /**
-   * Pre-flight check at job creation. Unlimited-plan shops always pass. Throws
-   * InsufficientCreditsError (402) rather than returning a boolean, since every
+   * Pre-flight check at job creation. Unlimited-plan shops bypass the credit
+   * ledger entirely but are still bounded by UNLIMITED_PLAN.fairUseCreditsPerMonth
+   * (see billingPacks.js — a literally uncapped plan can't guarantee any
+   * margin), reset lazily each UTC month. Throws InsufficientCreditsError (402)
+   * or QuotaExceededError (429) rather than returning a boolean, since every
    * call site wants to short-circuit the request identically.
-   * @param {{ plan?: string, creditBalance?: number }} shop
+   * @param {{ plan?: string, creditBalance?: number, unlimitedUsage?: object }} shop
    * @param {number} requiredCredits
    */
   function assertSufficientCredits(shop, requiredCredits) {
-    if (shop.plan === 'unlimited') return;
+    if (shop.plan === 'unlimited') {
+      const usedThisMonth = unlimitedCreditsUsedThisMonth(shop);
+      if (usedThisMonth + requiredCredits > UNLIMITED_PLAN.fairUseCreditsPerMonth) {
+        throw new QuotaExceededError(
+          `Unlimited plan fair-use cap reached (${UNLIMITED_PLAN.fairUseCreditsPerMonth} credits this month) — resets on the 1st.`,
+        );
+      }
+      return;
+    }
     const balance = shop.creditBalance ?? 0;
     if (balance < requiredCredits) {
       throw new InsufficientCreditsError(requiredCredits, balance);

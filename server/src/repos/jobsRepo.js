@@ -160,9 +160,17 @@ function createJobsRepo({ db, FieldValue, leaseTimeoutMs = JOB_LEASE_TIMEOUT_MS 
         });
         updates.ledgerEntryId = ledgerEntryId;
       } else {
+        // Unlimited plan: no ledger debit, but still tracked against the
+        // fair-use monthly cap credits.js's assertSufficientCredits gates on
+        // (see billingPacks.js's UNLIMITED_PLAN.fairUseCreditsPerMonth) — reset
+        // lazily on month change, same pattern as imageOptimizerUsageRepo's
+        // daily reset, rather than a separate scheduled job.
+        const monthUtc = new Date().toISOString().slice(0, 7);
+        const creditsThisMonth = (shop.unlimitedUsage?.month === monthUtc ? shop.unlimitedUsage?.creditsThisMonth ?? 0 : 0) + cost;
         tx.update(shopRef, {
           lifetimeCreditsSpent: FieldValue.increment(cost),
           lifetimeImagesGenerated: FieldValue.increment(resultVariations.length),
+          unlimitedUsage: { month: monthUtc, creditsThisMonth },
         });
       }
 

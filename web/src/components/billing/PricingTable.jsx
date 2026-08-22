@@ -58,7 +58,7 @@ export function PricingTable({ packs, unlimitedPlan, onSubscribe, onSubscribeUnl
                 </Text>
               </Text>
               <Text as="p" tone="subdued">
-                Unlimited generations
+                Unlimited generations, fair use up to {unlimitedPlan.fairUseCreditsPerMonth?.toLocaleString()} credits/mo
               </Text>
               <Button variant="primary" onClick={onSubscribeUnlimited} loading={isPending}>
                 Go Unlimited

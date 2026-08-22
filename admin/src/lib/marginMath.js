@@ -80,6 +80,11 @@ export function computeMarginForPack(pack, costPerCreditCents, period = 'monthly
   return ((revenuePerCreditCents - costPerCreditCents) / revenuePerCreditCents) * 100;
 }
 
+// The hard margin floor every plan must clear (server/src/services/billingPacks.js's
+// MARGIN_TARGET) — kept in sync by hand since this is a separate frontend
+// workspace with no import access to the server's source.
+export const MARGIN_TARGET_PCT = 70;
+
 /**
  * Map a margin percentage to a Polaris <Badge tone="...">-compatible tone
  * (verified against @shopify/polaris 13.9.5's Badge Tone union, which
@@ -89,7 +94,7 @@ export function computeMarginForPack(pack, costPerCreditCents, period = 'monthly
  */
 export function marginBadgeTone(marginPct) {
   if (marginPct < 0) return 'critical';
-  if (marginPct < 20) return 'warning';
+  if (marginPct < MARGIN_TARGET_PCT) return 'warning';
   return 'success';
 }
 
