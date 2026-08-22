@@ -20,7 +20,10 @@ use_legacy_install_flow = false
 redirect_urls = [ "https://REPLACE_WITH_YOUR_RENDER_URL.onrender.com/api/auth/callback" ]
 
 [webhooks]
-api_version = "2025-07"
+# Keep this in sync with CURRENT_API_VERSION in server/src/config/shopify.js —
+# it's a separate hardcoded value here (the CLI config) from there (the SDK
+# config), and nothing enforces they match automatically.
+api_version = "2026-07"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
