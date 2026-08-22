@@ -5,14 +5,23 @@ const { CREDIT_PACKS, UNLIMITED_PLAN } = require('../../../src/services/billingP
 const SHOP = 'test-shop.myshopify.com';
 
 describe('integration: /api/billing', () => {
-  it('GET /status reflects the shop doc', async () => {
+  it('GET /status reflects the shop doc, including googleVerified', async () => {
     const { app, db } = buildTestApp();
-    await db.collection('shops').doc(SHOP).set({ shopDomain: SHOP, plan: 'metered', creditBalance: 42, lifetimeCreditsSpent: 10, lifetimeImagesGenerated: 5 });
+    await db.collection('shops').doc(SHOP).set({ shopDomain: SHOP, plan: 'metered', creditBalance: 42, lifetimeCreditsSpent: 10, lifetimeImagesGenerated: 5, googleVerified: true });
 
     const res = await request(app).get('/api/billing/status');
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ plan: 'metered', creditBalance: 42, lifetimeCreditsSpent: 10, lifetimeImagesGenerated: 5 });
+    expect(res.body).toEqual({ plan: 'metered', creditBalance: 42, lifetimeCreditsSpent: 10, lifetimeImagesGenerated: 5, googleVerified: true });
+  });
+
+  it('GET /status reports googleVerified:false for a shop that has never signed in with Google', async () => {
+    const { app, db } = buildTestApp();
+    await db.collection('shops').doc(SHOP).set({ shopDomain: SHOP, plan: 'metered', creditBalance: 0, lifetimeCreditsSpent: 0, lifetimeImagesGenerated: 0 });
+
+    const res = await request(app).get('/api/billing/status');
+
+    expect(res.body.googleVerified).toBe(false);
   });
 
   it('GET /custom-purchase/preview computes credits via the shared billingPacks formula', async () => {

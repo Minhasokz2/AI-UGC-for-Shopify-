@@ -43,6 +43,12 @@ function createBillingRouter({ billingService, shopsRepo, getGraphqlClient, retu
       creditBalance: req.shop.creditBalance,
       lifetimeCreditsSpent: req.shop.lifetimeCreditsSpent,
       lifetimeImagesGenerated: req.shop.lifetimeImagesGenerated,
+      // Not billing-specific, but this is the one endpoint the frontend's
+      // ['shopStatus'] query already calls on every page load and
+      // invalidates after the Google Sign-In popup succeeds — see
+      // web/src/components/auth/GoogleSignInGate.jsx, which needs this
+      // field to know whether to show the sign-in prompt at all.
+      googleVerified: !!req.shop.googleVerified,
     });
   });
 
