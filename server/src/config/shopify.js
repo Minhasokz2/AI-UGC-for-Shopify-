@@ -46,17 +46,30 @@ function getShopify(overrides = {}) {
       isEmbeddedApp: true,
       // `scopes` is deliberately omitted — this app uses Shopify-managed installation,
       // so scopes are declared in shopify.app.toml / the Partner Dashboard, not here.
-      future: {
-        // Embedded apps should use token exchange instead of the OAuth Authorization
-        // Code Grant flow — avoids full-page-redirect reauth-loop failure modes inside
-        // Shopify's admin iframe. Verified against the installed SDK's source
-        // (middlewares/perform-token-exchange.mjs): hooks.afterAuth DOES still fire
-        // under token exchange, once per newly-exchanged session (deduped by the
-        // SDK's own idempotent-promise handler) — so webhook registration below is
-        // the same afterAuth hook the classic OAuth flow would use, not a bespoke
-        // lazy-registration workaround.
-        tokenExchange: true,
-      },
+    },
+    // `future` is a top-level shopifyApp() option, a sibling of `api` — NOT nested inside
+    // it. It was previously (incorrectly) nested under `api`, where shopify-app-express
+    // silently ignores it (this is plain JS, so the mistake wasn't caught by a type
+    // checker): `config.future.tokenExchange` was always undefined, so
+    // validateAuthenticatedSession()/ensureInstalledOnShop() always fell back to the
+    // legacy Auth Code flow. That flow's reauth redirect targets `${auth.path}?shop=...`
+    // (i.e. this same URL) with no `shopify.auth.begin()` route registered in app.js to
+    // actually handle it, which is exactly the infinite self-redirect confirmed live
+    // (curl showed `/api/auth?shop=X` 302-ing right back to itself).
+    future: {
+      // Embedded apps should use token exchange instead of the OAuth Authorization
+      // Code Grant flow — avoids full-page-redirect reauth-loop failure modes inside
+      // Shopify's admin iframe. Verified against the installed SDK's source
+      // (middlewares/perform-token-exchange.mjs): hooks.afterAuth DOES still fire
+      // under token exchange, once per newly-exchanged session (deduped by the
+      // SDK's own idempotent-promise handler) — so webhook registration below is
+      // the same afterAuth hook the classic OAuth flow would use, not a bespoke
+      // lazy-registration workaround. Also confirmed (auth/index.js in the installed
+      // SDK): shopify.auth.begin()/callback() actively refuse to run (400) once this
+      // flag is genuinely on, so no classic /api/auth route should be registered
+      // alongside it — validateAuthenticatedSession()'s renderAppBridge() bounce is
+      // the SDK's own intended recovery path for a document request with no session.
+      tokenExchange: true,
     },
     auth: { path: '/api/auth', callbackPath: '/api/auth/callback' },
     webhooks: { path: env.SHOPIFY_WEBHOOK_PATH },
