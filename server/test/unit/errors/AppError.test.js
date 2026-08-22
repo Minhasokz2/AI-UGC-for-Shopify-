@@ -5,6 +5,7 @@ const {
   PersonaGuardError,
   NoApprovedVariationsError,
   ConcurrencyLimitError,
+  QuotaExceededError,
   IdempotencyConflictError,
   PublishError,
   ShopifyApiError,
@@ -37,6 +38,13 @@ describe('errors/AppError', () => {
 
   it('ConcurrencyLimitError is 429', () => {
     expect(new ConcurrencyLimitError('shop').statusCode).toBe(429);
+  });
+
+  it('QuotaExceededError is 429', () => {
+    const err = new QuotaExceededError('Daily quota reached');
+    expect(err.statusCode).toBe(429);
+    expect(err.code).toBe('QUOTA_EXCEEDED');
+    expect(err.message).toBe('Daily quota reached');
   });
 
   it('IdempotencyConflictError is 409', () => {

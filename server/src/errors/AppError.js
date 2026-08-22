@@ -69,6 +69,18 @@ class ConcurrencyLimitError extends AppError {
   }
 }
 
+/**
+ * Thrown by imageOptimizerQuota.js when a shop's free daily Image Optimizer
+ * quota is exhausted and the paid add-on isn't active. Distinct from
+ * InsufficientCreditsError since Image Optimizer uses a daily-quota model, not
+ * the credit ledger.
+ */
+class QuotaExceededError extends AppError {
+  constructor(message = 'Daily quota exceeded.') {
+    super(message, 429, { code: 'QUOTA_EXCEEDED' });
+  }
+}
+
 class IdempotencyConflictError extends AppError {
   constructor(message = 'An identical request is already in flight.') {
     super(message, 409, { code: 'IDEMPOTENCY_CONFLICT' });
@@ -129,6 +141,7 @@ module.exports = {
   PersonaGuardError,
   NoApprovedVariationsError,
   ConcurrencyLimitError,
+  QuotaExceededError,
   IdempotencyConflictError,
   PublishError,
   ShopifyApiError,
