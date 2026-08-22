@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BlockStack, InlineStack, Text, TextField, Button, Thumbnail, Checkbox } from '@shopify/polaris';
 import { useProducts, useSyncProducts } from '../../hooks/useProducts.js';
 import { LoadingState } from '../feedback/LoadingState.jsx';
@@ -19,8 +19,22 @@ export function ProductPicker({ multiple = false, selectedIds = [], onChangeSele
   const [search, setSearch] = useState('');
   const { data, isLoading, isError, error } = useProducts({ search, limit: 20 });
   const syncProducts = useSyncProducts();
+  const hasAutoSynced = useRef(false);
 
   const products = data?.products ?? [];
+
+  // A merchant shouldn't need to know "Sync catalog" exists just to see their
+  // own products on first load — auto-trigger it once if the cache comes back
+  // empty. Guarded to fire only once per mount so a genuinely empty Shopify
+  // catalog (or a search with no matches) doesn't retry forever; the button
+  // below still exists for an explicit re-sync after adding new products.
+  useEffect(() => {
+    if (!hasAutoSynced.current && !isLoading && !isError && products.length === 0) {
+      hasAutoSynced.current = true;
+      syncProducts.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, isError, products.length]);
 
   function toggle(product) {
     if (multiple) {
@@ -59,7 +73,10 @@ export function ProductPicker({ multiple = false, selectedIds = [], onChangeSele
 
       {isLoading && <LoadingState label="Loading products…" />}
       {isError && <ErrorState error={error} title="Couldn't load products" />}
-      {!isLoading && !isError && products.length === 0 && (
+      {!isLoading && !isError && products.length === 0 && syncProducts.isPending && (
+        <LoadingState label="Syncing your catalog…" />
+      )}
+      {!isLoading && !isError && products.length === 0 && !syncProducts.isPending && (
         <EmptyState heading="No products found">
           <Text as="p">Try syncing your catalog, or search for a different term.</Text>
         </EmptyState>
