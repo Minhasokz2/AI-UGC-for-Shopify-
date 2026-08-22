@@ -395,4 +395,18 @@ describe('repos/jobsRepo', () => {
       expect(resumable.map((j) => j.id).sort()).toEqual(['a', 'b']);
     });
   });
+
+  describe('countActiveJobsForShop', () => {
+    it('counts only pending/processing jobs for the given shop', async () => {
+      const { db, repo } = makeRepo();
+      await db.collection('jobs').doc('a').set({ shopDomain: 'shop-a', status: 'pending' });
+      await db.collection('jobs').doc('b').set({ shopDomain: 'shop-a', status: 'processing' });
+      await db.collection('jobs').doc('c').set({ shopDomain: 'shop-a', status: 'succeeded' });
+      await db.collection('jobs').doc('d').set({ shopDomain: 'shop-b', status: 'pending' });
+
+      expect(await repo.countActiveJobsForShop('shop-a')).toBe(2);
+      expect(await repo.countActiveJobsForShop('shop-b')).toBe(1);
+      expect(await repo.countActiveJobsForShop('shop-c')).toBe(0);
+    });
+  });
 });

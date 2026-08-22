@@ -10,10 +10,20 @@
 // Job-worker failures deliberately do NOT go through this handler — a worker
 // has no HTTP response to send, so workers/jobWorker.js calls
 // Sentry.captureException directly in its own catch block instead.
+//
+// Every route validates its body/query with zod, and a ZodError is exactly
+// the shape of "the merchant sent something malformed" — a 400, not a 500 —
+// so it's special-cased here rather than requiring every route to catch it
+// individually.
 
+const { ZodError } = require('zod');
 const { Sentry } = require('../config/sentry');
 
 const GENERIC_MESSAGE = 'Internal server error';
+
+function isZodError(err) {
+  return err instanceof ZodError || err?.name === 'ZodError';
+}
 
 /**
  * @param {{ logger?: object, captureException?: Function }} [deps] injectable for tests
@@ -21,6 +31,13 @@ const GENERIC_MESSAGE = 'Internal server error';
 function createErrorHandler({ logger = require('../config/logger').logger, captureException = Sentry.captureException.bind(Sentry) } = {}) {
   // eslint-disable-next-line no-unused-vars
   return function errorHandler(err, req, res, next) {
+    if (isZodError(err)) {
+      res.status(400).json({
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid request', details: err.issues ?? err.errors },
+      });
+      return;
+    }
+
     const statusCode = err.statusCode && Number.isInteger(err.statusCode) ? err.statusCode : 500;
     const expose = err.expose !== false && statusCode < 500;
 

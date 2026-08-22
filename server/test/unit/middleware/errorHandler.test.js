@@ -1,3 +1,4 @@
+const { z } = require('zod');
 const { createErrorHandler, GENERIC_MESSAGE } = require('../../../src/middleware/errorHandler');
 const { ValidationError, PublishError } = require('../../../src/errors/AppError');
 
@@ -80,6 +81,27 @@ describe('middleware/errorHandler', () => {
     handler(err, {}, res, () => {});
 
     expect(res.body.error.message).toBe(GENERIC_MESSAGE);
+  });
+
+  it('maps a ZodError to a 400 VALIDATION_ERROR with the issues as details, without logging or reporting', () => {
+    const logger = { error: vi.fn() };
+    const captureException = vi.fn();
+    const handler = createErrorHandler({ logger, captureException });
+    const res = makeRes();
+    let zodErr;
+    try {
+      z.object({ contentType: z.enum(['scene', 'ugc']) }).parse({ contentType: 'nonsense' });
+    } catch (e) {
+      zodErr = e;
+    }
+
+    handler(zodErr, {}, res, () => {});
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(Array.isArray(res.body.error.details)).toBe(true);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(captureException).not.toHaveBeenCalled();
   });
 
   it('defaults to 500 for a plain error with no statusCode', () => {

@@ -108,6 +108,15 @@ function createConversionJobsRepo({ db, FieldValue, leaseTimeoutMs = JOB_LEASE_T
     });
   }
 
+  /** Backs the Image Optimizer's job-history listing. */
+  async function queryByShop({ shopDomain, status, limit = 50 }) {
+    let query = jobsCol.where('shopDomain', '==', shopDomain);
+    if (status !== undefined) query = query.where('status', '==', status);
+    query = query.orderBy('createdAt', 'desc').limit(limit);
+    const snap = await query.get();
+    return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  }
+
   return {
     getById,
     createConversionJob,
@@ -115,6 +124,7 @@ function createConversionJobsRepo({ db, FieldValue, leaseTimeoutMs = JOB_LEASE_T
     heartbeat,
     settleConversionSuccess,
     settleConversionFailure,
+    queryByShop,
   };
 }
 

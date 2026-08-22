@@ -293,10 +293,22 @@ function createJobsRepo({ db, FieldValue, leaseTimeoutMs = JOB_LEASE_TIMEOUT_MS 
     return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
   }
 
+  /**
+   * Backs the job-creation route's 20-concurrent-job-per-shop admission
+   * control (a business rule distinct from the HTTP burst guard). Requires a
+   * composite index on (shopDomain ==, status in) — documented in
+   * createFirestoreIndexes.md.
+   */
+  async function countActiveJobsForShop(shopDomain) {
+    const snap = await jobsCol.where('shopDomain', '==', shopDomain).where('status', 'in', ['pending', 'processing']).get();
+    return snap.size;
+  }
+
   return {
     getById,
     claimForProcessing,
     heartbeat,
+    countActiveJobsForShop,
     claimAndCreateJob,
     settleJobSuccess,
     settleJobFailure,

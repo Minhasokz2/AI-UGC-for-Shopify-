@@ -101,6 +101,23 @@ function createBillingReconciliation({ shopsRepo, billingService, getGraphqlClie
   return { reconcileShop, runReconciliationSweep };
 }
 
+/**
+ * Maps a subscription's display name (as billingService.js constructs it —
+ * e.g. "MotionArt Growth (Monthly)") back to its monthly credit grant. Pure
+ * and exported so container.js can build the production billingReconciliation
+ * instance with the exact same mapping this file's own singleton uses.
+ * @param {string} subscriptionName
+ * @returns {number|null} credits to grant, 0 for Unlimited (never draws down a
+ *   balance), or null if the name doesn't match any known pack/plan.
+ */
+function creditsForPack(subscriptionName) {
+  const { CREDIT_PACKS, UNLIMITED_PLAN } = require('./billingPacks');
+  const pack = CREDIT_PACKS.find((p) => subscriptionName.includes(p.label));
+  if (pack) return pack.monthlyCredits;
+  if (subscriptionName.includes(UNLIMITED_PLAN.label)) return 0;
+  return null;
+}
+
 let singleton;
 /** Lazily builds the production singleton wired to real Firestore/Shopify. */
 function getBillingReconciliation() {
@@ -108,16 +125,7 @@ function getBillingReconciliation() {
     const { getShopsRepo } = require('../repos/shopsRepo');
     const { getBillingService } = require('./billingService');
     const { getShopify } = require('../config/shopify');
-    const { CREDIT_PACKS, UNLIMITED_PLAN } = require('./billingPacks');
     const { logger } = require('../config/logger');
-
-    /** Maps a subscription's display name back to its monthly credit grant. */
-    function creditsForPack(subscriptionName) {
-      const pack = CREDIT_PACKS.find((p) => subscriptionName.includes(p.label));
-      if (pack) return pack.monthlyCredits;
-      if (subscriptionName.includes(UNLIMITED_PLAN.label)) return 0; // Unlimited never draws down a credit balance.
-      return null;
-    }
 
     singleton = createBillingReconciliation({
       shopsRepo: getShopsRepo(),
@@ -135,4 +143,4 @@ function getBillingReconciliation() {
   return singleton;
 }
 
-module.exports = { createBillingReconciliation, getBillingReconciliation };
+module.exports = { createBillingReconciliation, getBillingReconciliation, creditsForPack };

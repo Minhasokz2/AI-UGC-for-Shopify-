@@ -167,4 +167,19 @@ describe('repos/conversionJobsRepo', () => {
       expect(job.status).toBe('processing');
     });
   });
+
+  describe('queryByShop', () => {
+    it('returns only the given shop\'s jobs, optionally filtered by status', async () => {
+      const { db, repo } = makeRepo();
+      await seedJob(db, 'job1', { shopDomain: 'shop-a', status: 'succeeded', createdAt: FakeTimestamp.fromMillis(1) });
+      await seedJob(db, 'job2', { shopDomain: 'shop-a', status: 'pending', createdAt: FakeTimestamp.fromMillis(2) });
+      await seedJob(db, 'job3', { shopDomain: 'shop-b', status: 'succeeded', createdAt: FakeTimestamp.fromMillis(3) });
+
+      const all = await repo.queryByShop({ shopDomain: 'shop-a' });
+      expect(all.map((j) => j.id).sort()).toEqual(['job1', 'job2']);
+
+      const succeededOnly = await repo.queryByShop({ shopDomain: 'shop-a', status: 'succeeded' });
+      expect(succeededOnly.map((j) => j.id)).toEqual(['job1']);
+    });
+  });
 });

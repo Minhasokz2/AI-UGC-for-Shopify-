@@ -1,4 +1,5 @@
-const { createBillingReconciliation } = require('../../../src/services/billingReconciliation');
+const { createBillingReconciliation, creditsForPack } = require('../../../src/services/billingReconciliation');
+const { CREDIT_PACKS, UNLIMITED_PLAN } = require('../../../src/services/billingPacks');
 
 function makeDeps(overrides = {}) {
   return {
@@ -13,6 +14,21 @@ function makeDeps(overrides = {}) {
 }
 
 describe('services/billingReconciliation', () => {
+  describe('creditsForPack', () => {
+    it('resolves a subscription name containing a pack label to that pack\'s monthly credits', () => {
+      const pack = CREDIT_PACKS.find((p) => p.id === 'growth');
+      expect(creditsForPack(`MotionArt ${pack.label} (Monthly)`)).toBe(pack.monthlyCredits);
+    });
+
+    it('resolves the Unlimited plan to 0 (never draws down a balance)', () => {
+      expect(creditsForPack(`MotionArt ${UNLIMITED_PLAN.label}`)).toBe(0);
+    });
+
+    it('returns null for a name matching no known pack/plan', () => {
+      expect(creditsForPack('Some Unrelated Charge')).toBeNull();
+    });
+  });
+
   describe('reconcileShop', () => {
     it('skips a shop with no offline session', async () => {
       const deps = makeDeps({ getSessionForShop: vi.fn().mockResolvedValue(undefined) });
