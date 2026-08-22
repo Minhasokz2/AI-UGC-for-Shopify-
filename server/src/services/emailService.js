@@ -14,6 +14,12 @@ let realClient;
 /** Lazily-constructed real Resend client, configured with RESEND_API_KEY. */
 function getClient() {
   if (!realClient) {
+    if (!env.RESEND_API_KEY) {
+      throw new ProviderApiError('Email sending is not configured (RESEND_API_KEY is not set).', {
+        provider: 'resend',
+        status: 503,
+      });
+    }
     realClient = new Resend(env.RESEND_API_KEY);
   }
   return realClient;

@@ -27,8 +27,9 @@ const schema = z
     OPENAI_API_KEY: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
 
-    // WaveSpeed (video)
-    WAVESPEED_API_KEY: z.string().min(1),
+    // WaveSpeed (video) — optional: if unset, video generation fails per-job with a
+    // clear "not configured" error rather than blocking boot (see services/wavespeed.js).
+    WAVESPEED_API_KEY: z.string().optional(),
     WAVESPEED_BASE_URL: z.string().url().optional().or(z.literal('')),
 
     // Cloudinary
@@ -36,9 +37,10 @@ const schema = z
     CLOUDINARY_API_KEY: z.string().min(1),
     CLOUDINARY_API_SECRET: z.string().min(1),
 
-    // Resend
-    RESEND_API_KEY: z.string().min(1),
-    RESEND_FROM_EMAIL: z.string().email(),
+    // Resend — optional: if unset, sendEmail() fails per-call rather than blocking boot
+    // (nurtureEmailService already treats a per-shop email failure as non-fatal).
+    RESEND_API_KEY: z.string().optional(),
+    RESEND_FROM_EMAIL: z.string().email().optional(),
 
     // Sentry
     SENTRY_DSN: z.string().url().optional().or(z.literal('')),
@@ -58,20 +60,12 @@ const schema = z
     JOB_LEASE_TIMEOUT_MS: z.coerce.number().default(600_000),
     RATE_LIMIT_PER_SHOP_PER_MIN: z.coerce.number().default(100),
     IMAGE_OPTIMIZER_FREE_DAILY_QUOTA: z.coerce.number().default(10),
-  })
-  .superRefine((val, ctx) => {
-    const providerKey = val.BRAND_STYLE_LLM_PROVIDER === 'openai' ? val.OPENAI_API_KEY : val.ANTHROPIC_API_KEY;
-    if (!providerKey) {
-      ctx.addIssue({
-        code: 'custom',
-        path: [val.BRAND_STYLE_LLM_PROVIDER === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY'],
-        message: `Missing API key for BRAND_STYLE_LLM_PROVIDER=${val.BRAND_STYLE_LLM_PROVIDER}`,
-      });
-    }
-    if (val.NODE_ENV === 'production' && !val.SENTRY_DSN) {
-      ctx.addIssue({ code: 'custom', path: ['SENTRY_DSN'], message: 'SENTRY_DSN is required in production' });
-    }
   });
+// Both the brand-style LLM key (OPENAI_API_KEY/ANTHROPIC_API_KEY) and SENTRY_DSN are
+// deliberately NOT enforced here even in production: an unset provider key means that
+// one feature (brand-style extraction / error tracking) fails clearly at call time
+// (see services/brandStyle.js, config/sentry.js) rather than the whole server refusing
+// to boot when an operator chooses not to use that provider.
 
 /**
  * Parses and validates process.env, unescaping the Firebase private key's literal

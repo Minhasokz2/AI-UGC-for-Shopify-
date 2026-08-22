@@ -46,6 +46,12 @@ let realOpenAIClient;
 /** Lazily-constructed real OpenAI client, configured with OPENAI_API_KEY. */
 function getOpenAIClient() {
   if (!realOpenAIClient) {
+    if (!env.OPENAI_API_KEY) {
+      throw new ProviderApiError(
+        'Brand style extraction is not configured for provider "openai" (OPENAI_API_KEY is not set).',
+        { provider: 'openai', status: 503 },
+      );
+    }
     // eslint-disable-next-line global-require
     const OpenAI = require('openai');
     realOpenAIClient = new OpenAI({ apiKey: env.OPENAI_API_KEY });
@@ -57,6 +63,12 @@ let realAnthropicClient;
 /** Lazily-constructed real Anthropic client, configured with ANTHROPIC_API_KEY. */
 function getAnthropicClient() {
   if (!realAnthropicClient) {
+    if (!env.ANTHROPIC_API_KEY) {
+      throw new ProviderApiError(
+        'Brand style extraction is not configured for provider "anthropic" (ANTHROPIC_API_KEY is not set).',
+        { provider: 'anthropic', status: 503 },
+      );
+    }
     // eslint-disable-next-line global-require
     const Anthropic = require('@anthropic-ai/sdk');
     realAnthropicClient = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });

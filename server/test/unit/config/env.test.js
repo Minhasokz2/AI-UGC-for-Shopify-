@@ -41,9 +41,9 @@ describe('config/env', () => {
     expect(() => parseEnv(rest)).toThrow();
   });
 
-  it('throws when the brand-style provider key is missing for the selected provider', () => {
+  it('does not require a brand-style provider key — extractBrandStyle() guards this at call time instead', () => {
     const { ANTHROPIC_API_KEY, ...rest } = baseEnv();
-    expect(() => parseEnv({ ...rest, BRAND_STYLE_LLM_PROVIDER: 'anthropic' })).toThrow();
+    expect(() => parseEnv({ ...rest, BRAND_STYLE_LLM_PROVIDER: 'anthropic' })).not.toThrow();
   });
 
   it('accepts openai as the brand-style provider when OPENAI_API_KEY is set', () => {
@@ -51,9 +51,14 @@ describe('config/env', () => {
     expect(env.BRAND_STYLE_LLM_PROVIDER).toBe('openai');
   });
 
-  it('requires SENTRY_DSN in production', () => {
-    expect(() => parseEnv(baseEnv({ NODE_ENV: 'production' }))).toThrow();
+  it('does not require SENTRY_DSN in production — config/sentry.js simply skips init when unset', () => {
+    expect(() => parseEnv(baseEnv({ NODE_ENV: 'production' }))).not.toThrow();
     expect(() => parseEnv(baseEnv({ NODE_ENV: 'production', SENTRY_DSN: 'https://sentry.example.com/1' }))).not.toThrow();
+  });
+
+  it('does not require WAVESPEED_API_KEY, RESEND_API_KEY, or RESEND_FROM_EMAIL', () => {
+    const { WAVESPEED_API_KEY, RESEND_API_KEY, RESEND_FROM_EMAIL, ...rest } = baseEnv();
+    expect(() => parseEnv(rest)).not.toThrow();
   });
 
   it('applies defaults for worker/runtime tuning vars', () => {

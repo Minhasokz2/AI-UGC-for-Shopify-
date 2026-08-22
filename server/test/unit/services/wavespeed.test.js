@@ -1,4 +1,6 @@
-const { generateVideo } = require('../../../src/services/wavespeed');
+const { generateVideo, getClient } = require('../../../src/services/wavespeed');
+const { env } = require('../../../src/config/env');
+const { ProviderApiError } = require('../../../src/errors/AppError');
 
 describe('services/wavespeed', () => {
   const model = { id: 'test-video', endpoint: 'wavespeed-ai/test/image-to-video', imageParam: 'image_url' };
@@ -31,5 +33,16 @@ describe('services/wavespeed', () => {
   it('throws when the client returns a malformed result with no outputs array at all', async () => {
     const client = { run: vi.fn().mockResolvedValue({}) };
     await expect(generateVideo({ model, imageUrl: 'x', client })).rejects.toThrow(/no output URL/);
+  });
+
+  it('getClient() throws a ProviderApiError when WAVESPEED_API_KEY is not set', () => {
+    const original = env.WAVESPEED_API_KEY;
+    env.WAVESPEED_API_KEY = undefined;
+    try {
+      expect(() => getClient()).toThrow(ProviderApiError);
+      expect(() => getClient()).toThrow(/not configured/);
+    } finally {
+      env.WAVESPEED_API_KEY = original;
+    }
   });
 });

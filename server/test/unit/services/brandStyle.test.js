@@ -1,5 +1,11 @@
-const { extractBrandStyle, parseBrandStyleResponse } = require('../../../src/services/brandStyle');
+const {
+  extractBrandStyle,
+  parseBrandStyleResponse,
+  getOpenAIClient,
+  getAnthropicClient,
+} = require('../../../src/services/brandStyle');
 const { ProviderApiError } = require('../../../src/errors/AppError');
+const { env } = require('../../../src/config/env');
 
 describe('services/brandStyle', () => {
   describe('parseBrandStyleResponse', () => {
@@ -91,6 +97,28 @@ describe('services/brandStyle', () => {
       await expect(extractBrandStyle({ imageUrls: [], provider: 'gemini', client: {} })).rejects.toThrow(
         /unsupported provider/,
       );
+    });
+
+    it('getOpenAIClient() throws a ProviderApiError when OPENAI_API_KEY is not set', () => {
+      const original = env.OPENAI_API_KEY;
+      env.OPENAI_API_KEY = undefined;
+      try {
+        expect(() => getOpenAIClient()).toThrow(ProviderApiError);
+        expect(() => getOpenAIClient()).toThrow(/not configured/);
+      } finally {
+        env.OPENAI_API_KEY = original;
+      }
+    });
+
+    it('getAnthropicClient() throws a ProviderApiError when ANTHROPIC_API_KEY is not set', () => {
+      const original = env.ANTHROPIC_API_KEY;
+      env.ANTHROPIC_API_KEY = undefined;
+      try {
+        expect(() => getAnthropicClient()).toThrow(ProviderApiError);
+        expect(() => getAnthropicClient()).toThrow(/not configured/);
+      } finally {
+        env.ANTHROPIC_API_KEY = original;
+      }
     });
   });
 });

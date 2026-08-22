@@ -1,4 +1,4 @@
-const { sendEmail } = require('../../../src/services/emailService');
+const { sendEmail, getClient } = require('../../../src/services/emailService');
 const { ProviderApiError } = require('../../../src/errors/AppError');
 const { env } = require('../../../src/config/env');
 
@@ -25,5 +25,16 @@ describe('services/emailService', () => {
     await expect(sendEmail({ to: 'x@example.com', subject: 's', html: 'h' }, { client })).rejects.toBeInstanceOf(
       ProviderApiError,
     );
+  });
+
+  it('getClient() throws a ProviderApiError when RESEND_API_KEY is not set', () => {
+    const original = env.RESEND_API_KEY;
+    env.RESEND_API_KEY = undefined;
+    try {
+      expect(() => getClient()).toThrow(ProviderApiError);
+      expect(() => getClient()).toThrow(/not configured/);
+    } finally {
+      env.RESEND_API_KEY = original;
+    }
   });
 });

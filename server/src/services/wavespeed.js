@@ -28,11 +28,18 @@
 
 const { Client } = require('wavespeed');
 const { env } = require('../config/env');
+const { ProviderApiError } = require('../errors/AppError');
 
 let realClient;
 /** Lazily-constructed real wavespeed Client instance. */
 function getClient() {
   if (!realClient) {
+    if (!env.WAVESPEED_API_KEY) {
+      throw new ProviderApiError('Video generation is not configured (WAVESPEED_API_KEY is not set).', {
+        provider: 'wavespeed',
+        status: 503,
+      });
+    }
     const options = {};
     if (env.WAVESPEED_BASE_URL) options.baseUrl = env.WAVESPEED_BASE_URL;
     realClient = new Client(env.WAVESPEED_API_KEY, options);
