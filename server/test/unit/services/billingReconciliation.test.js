@@ -38,6 +38,7 @@ describe('services/billingReconciliation', () => {
     it('grants a pack renewal for an item whose handle matches a configured plan', async () => {
       const growth = CREDIT_PACKS.find((p) => p.id === 'growth');
       const growthHandle = 'growth-monthly-handle';
+      const originalHandle = PLAN_HANDLES.growth.monthly;
       PLAN_HANDLES.growth.monthly = growthHandle;
       try {
         const partnerApiClient = {
@@ -62,12 +63,13 @@ describe('services/billingReconciliation', () => {
         });
         expect(result).toEqual({ shopDomain: 'shop-a.myshopify.com', granted: 1, skipped: false });
       } finally {
-        PLAN_HANDLES.growth.monthly = null;
+        PLAN_HANDLES.growth.monthly = originalHandle;
       }
     });
 
     it('activates the Unlimited plan for a matching item, without granting credits', async () => {
       const unlimitedHandle = 'unlimited-handle';
+      const originalHandle = PLAN_HANDLES.unlimited.monthly;
       PLAN_HANDLES.unlimited.monthly = unlimitedHandle;
       try {
         const partnerApiClient = {
@@ -89,7 +91,7 @@ describe('services/billingReconciliation', () => {
         expect(billingService.grantCreditsForCharge).not.toHaveBeenCalled();
         expect(result.granted).toBe(0);
       } finally {
-        PLAN_HANDLES.unlimited.monthly = null;
+        PLAN_HANDLES.unlimited.monthly = originalHandle;
       }
     });
 

@@ -46,6 +46,7 @@ describe('integration: /api/billing', () => {
     it('grants a pack subscription\'s credits exactly once, verified via the Partner API', async () => {
       const growth = CREDIT_PACKS.find((p) => p.id === 'growth');
       const growthHandle = 'growth-monthly-handle';
+      const originalGrowthHandle = PLAN_HANDLES.growth.monthly;
       PLAN_HANDLES.growth.monthly = growthHandle;
       try {
         const shopify = createFakeShopify({ graphqlHandler: graphqlHandlerForIds() });
@@ -68,12 +69,13 @@ describe('integration: /api/billing', () => {
         const shop = (await db.collection('shops').doc(SHOP).get()).data();
         expect(shop.creditBalance).toBe(growth.monthlyCredits);
       } finally {
-        PLAN_HANDLES.growth.monthly = null;
+        PLAN_HANDLES.growth.monthly = originalGrowthHandle;
       }
     });
 
     it('activates the Unlimited plan once confirmed', async () => {
       const unlimitedHandle = 'unlimited-handle';
+      const originalUnlimitedHandle = PLAN_HANDLES.unlimited.monthly;
       PLAN_HANDLES.unlimited.monthly = unlimitedHandle;
       try {
         const shopify = createFakeShopify({ graphqlHandler: graphqlHandlerForIds() });
@@ -93,12 +95,13 @@ describe('integration: /api/billing', () => {
         const shop = (await db.collection('shops').doc(SHOP).get()).data();
         expect(shop.plan).toBe('unlimited');
       } finally {
-        PLAN_HANDLES.unlimited.monthly = null;
+        PLAN_HANDLES.unlimited.monthly = originalUnlimitedHandle;
       }
     });
 
     it('reports confirmed:false — and grants nothing — when the Partner API shows no matching active subscription', async () => {
       const growthHandle = 'growth-monthly-handle';
+      const originalGrowthHandle = PLAN_HANDLES.growth.monthly;
       PLAN_HANDLES.growth.monthly = growthHandle;
       try {
         const shopify = createFakeShopify({ graphqlHandler: graphqlHandlerForIds() });
@@ -112,7 +115,7 @@ describe('integration: /api/billing', () => {
         const shop = (await db.collection('shops').doc(SHOP).get()).data();
         expect(shop.creditBalance).toBe(0);
       } finally {
-        PLAN_HANDLES.growth.monthly = null;
+        PLAN_HANDLES.growth.monthly = originalGrowthHandle;
       }
     });
   });

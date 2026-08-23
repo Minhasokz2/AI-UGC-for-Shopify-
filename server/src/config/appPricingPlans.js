@@ -8,10 +8,10 @@
 // doesn't exist yet in Shopify App Pricing; the pricing table only offers a
 // pack/period once its handle is filled in here.
 const PLAN_HANDLES = {
-  starter: { monthly: null, annual: null },
-  growth: { monthly: null, annual: null },
-  scale: { monthly: null, annual: null },
-  unlimited: { monthly: null },
+  starter: { monthly: 'starter', annual: null },
+  growth: { monthly: 'growth', annual: null },
+  scale: { monthly: 'scale-monthly', annual: null },
+  unlimited: { monthly: 'unlimited-monthly' },
 };
 
 /**

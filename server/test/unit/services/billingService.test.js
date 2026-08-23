@@ -42,6 +42,7 @@ describe('services/billingService', () => {
 
     it('returns confirmed:false when the Partner API reports no active subscription — never trusts the client-supplied plan_handle alone', async () => {
       const growthHandle = 'growth-monthly-handle';
+      const originalHandle = PLAN_HANDLES.growth.monthly;
       PLAN_HANDLES.growth.monthly = growthHandle;
       try {
         const partnerApiClient = { getActiveSubscription: vi.fn().mockResolvedValue(null) };
@@ -51,12 +52,13 @@ describe('services/billingService', () => {
 
         expect(result).toEqual({ confirmed: false, reason: 'no_matching_active_subscription' });
       } finally {
-        PLAN_HANDLES.growth.monthly = null;
+        PLAN_HANDLES.growth.monthly = originalHandle;
       }
     });
 
     it('returns confirmed:false when the active subscription\'s items don\'t include the claimed handle', async () => {
       const growthHandle = 'growth-monthly-handle';
+      const originalHandle = PLAN_HANDLES.growth.monthly;
       PLAN_HANDLES.growth.monthly = growthHandle;
       try {
         const partnerApiClient = {
@@ -71,13 +73,14 @@ describe('services/billingService', () => {
 
         expect(result).toEqual({ confirmed: false, reason: 'no_matching_active_subscription' });
       } finally {
-        PLAN_HANDLES.growth.monthly = null;
+        PLAN_HANDLES.growth.monthly = originalHandle;
       }
     });
 
     it('grants the pack\'s credits once the Partner API confirms a matching active subscription', async () => {
       const growth = CREDIT_PACKS.find((p) => p.id === 'growth');
       const growthHandle = 'growth-monthly-handle';
+      const originalHandle = PLAN_HANDLES.growth.monthly;
       PLAN_HANDLES.growth.monthly = growthHandle;
       try {
         const partnerApiClient = {
@@ -99,12 +102,13 @@ describe('services/billingService', () => {
         );
         expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a.myshopify.com', { creditBalance: expect.anything() });
       } finally {
-        PLAN_HANDLES.growth.monthly = null;
+        PLAN_HANDLES.growth.monthly = originalHandle;
       }
     });
 
     it('is idempotent — confirming the same billing cycle twice grants credits only once', async () => {
       const growthHandle = 'growth-monthly-handle';
+      const originalHandle = PLAN_HANDLES.growth.monthly;
       PLAN_HANDLES.growth.monthly = growthHandle;
       try {
         const partnerApiClient = {
@@ -129,12 +133,13 @@ describe('services/billingService', () => {
         expect(first).toEqual({ confirmed: true, granted: true });
         expect(second).toEqual({ confirmed: true, granted: false });
       } finally {
-        PLAN_HANDLES.growth.monthly = null;
+        PLAN_HANDLES.growth.monthly = originalHandle;
       }
     });
 
     it('activates the Unlimited plan (no credit grant) once confirmed', async () => {
       const unlimitedHandle = 'unlimited-handle';
+      const originalHandle = PLAN_HANDLES.unlimited.monthly;
       PLAN_HANDLES.unlimited.monthly = unlimitedHandle;
       try {
         const partnerApiClient = {
@@ -151,7 +156,7 @@ describe('services/billingService', () => {
         expect(result).toEqual({ confirmed: true, plan: 'unlimited' });
         expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a.myshopify.com', { plan: 'unlimited', unlimitedPlanHandle: unlimitedHandle });
       } finally {
-        PLAN_HANDLES.unlimited.monthly = null;
+        PLAN_HANDLES.unlimited.monthly = originalHandle;
       }
     });
   });
