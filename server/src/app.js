@@ -13,6 +13,7 @@ const { createPublicGoogleAuthRouter } = require('./routes/api/auth/google');
 const { createApiRouter } = require('./routes/api');
 const { createAdminApiRouter } = require('./routes/admin');
 const { createRequestLogger } = require('./middleware/requestLogger');
+const { createHttpsRedirect } = require('./middleware/httpsRedirect');
 const { createAttachShopContext } = require('./middleware/auth');
 const { createBurstGuard } = require('./middleware/rateLimiter');
 const { createAdminAuth } = require('./middleware/adminAuth');
@@ -29,8 +30,15 @@ function createApp(deps) {
   app.disable('x-powered-by');
   app.use(createRequestLogger());
 
-  // Before any auth — Render's healthCheckPath hits this.
+  // Before any auth — Render's healthCheckPath hits this. Also before the
+  // HTTPS redirect below: Render's own health checker may hit this service
+  // without going through the public TLS-terminating edge, so it must never
+  // be redirected.
   app.get('/health', healthHandler);
+
+  // See middleware/httpsRedirect.js — app-level enforcement rather than
+  // relying solely on the hosting platform's default-domain TLS termination.
+  app.use(createHttpsRedirect({ nodeEnv: env.NODE_ENV }));
 
   // Must run before express.json(): shopify.processWebhooks() needs the raw
   // body for HMAC validation and parses it itself.
