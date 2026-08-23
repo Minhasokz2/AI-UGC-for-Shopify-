@@ -24,9 +24,9 @@ const { env } = require('../config/env');
 const { logger } = require('../config/logger');
 
 /**
- * @param {{ shopsRepo: object, productsRepo: object, sessionStorage: object, billingService: object }} deps
+ * @param {{ shopsRepo: object, productsRepo: object, sessionStorage: object }} deps
  */
-function createWebhookHandlers({ shopsRepo, productsRepo, sessionStorage, billingService }) {
+function createWebhookHandlers({ shopsRepo, productsRepo, sessionStorage }) {
   return {
     APP_UNINSTALLED: {
       deliveryMethod: DeliveryMethod.Http,
@@ -74,31 +74,13 @@ function createWebhookHandlers({ shopsRepo, productsRepo, sessionStorage, billin
         logger.info({ shop }, 'webhookHandlers: CUSTOMERS_DATA_REQUEST received (no-op — no per-customer data stored)');
       },
     },
-    // Shopify does NOT fire this on a routine successful renewal (that's the
-    // whole reason billingReconciliation.js's sweep exists) — it DOES fire on
-    // every status transition (cancelled, expired, frozen, declined), which
-    // is the only signal that ever tells this app an Unlimited-plan shop
-    // needs to be reverted to metered billing. Without this handler,
-    // cancelling on Shopify's side left the shop on a permanent free
-    // Unlimited bypass — deactivateUnlimitedPlan was correct but dead code,
-    // called from nowhere.
-    APP_SUBSCRIPTIONS_UPDATE: {
-      deliveryMethod: DeliveryMethod.Http,
-      callbackUrl: env.SHOPIFY_WEBHOOK_PATH,
-      callback: async (_topic, shop, rawBody) => {
-        const subscription = JSON.parse(rawBody).app_subscription;
-        if (!subscription || subscription.status === 'ACTIVE') return;
-
-        const shopRecord = await shopsRepo.getShop(shop);
-        // Only ever deactivate for the subscription actually recorded as this
-        // shop's current one — an event for an old, already-superseded
-        // subscription id must never clobber a newer active one.
-        if (shopRecord?.plan === 'unlimited' && shopRecord.unlimitedSubscriptionId === subscription.admin_graphql_api_id) {
-          await billingService.deactivateUnlimitedPlan(shop);
-          logger.info({ shop, status: subscription.status }, 'webhookHandlers: APP_SUBSCRIPTIONS_UPDATE deactivated Unlimited plan');
-        }
-      },
-    },
+    // Shopify App Pricing (this app's billing model) has no webhook at all for
+    // subscription status changes — confirmed against shopify.dev: subscription
+    // status comes exclusively from the Partner API, and the legacy
+    // APP_SUBSCRIPTIONS_UPDATE grace period for pre-migration apps ended
+    // 2026-04-28. billingReconciliation.js's periodic sweep is the sole
+    // mechanism that both grants renewal credits AND reverts a churned
+    // Unlimited-plan shop to metered billing.
   };
 }
 
@@ -108,12 +90,10 @@ function getWebhookHandlers() {
   if (!singleton) {
     const { getShopsRepo } = require('../repos/shopsRepo');
     const { getProductsRepo } = require('../repos/productsRepo');
-    const { getBillingService } = require('./billingService');
     const { getShopify } = require('../config/shopify');
     singleton = createWebhookHandlers({
       shopsRepo: getShopsRepo(),
       productsRepo: getProductsRepo(),
-      billingService: getBillingService(),
       sessionStorage: getShopify().config.sessionStorage,
     });
   }

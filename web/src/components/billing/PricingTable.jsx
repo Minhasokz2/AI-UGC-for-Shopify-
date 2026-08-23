@@ -3,19 +3,14 @@ import { useState } from 'react';
 import { formatCurrency } from '../../lib/formatCurrency.js';
 
 /**
- * @param {{
- *   packs: object[], unlimitedPlan: object,
- *   onSubscribe: (packId: string, period: string) => void,
- *   onSubscribeUnlimited: () => void,
- *   pendingPackId: string|undefined, isUnlimitedPending: boolean,
- * }} props `pendingPackId`/`isUnlimitedPending` identify which single button
- *   actually triggered a submission, so only THAT button shows a spinner —
- *   the others are merely disabled while any one submission is in flight,
- *   rather than every plan going into a loading state for one click.
+ * Purely informational pricing display — Shopify App Pricing means Shopify
+ * itself hosts the actual plan picker and processes the charge, so this
+ * table has no per-plan "Choose" buttons anymore. One CTA sends the merchant
+ * to Shopify's hosted page (onViewPlans), where they pick and confirm.
+ * @param {{ packs: object[], unlimitedPlan: object, onViewPlans: () => void }} props
  */
-export function PricingTable({ packs, unlimitedPlan, onSubscribe, onSubscribeUnlimited, pendingPackId, isUnlimitedPending }) {
+export function PricingTable({ packs, unlimitedPlan, onViewPlans }) {
   const [period, setPeriod] = useState('monthly');
-  const anyPending = Boolean(pendingPackId) || isUnlimitedPending;
 
   return (
     <BlockStack gap="400">
@@ -48,14 +43,6 @@ export function PricingTable({ packs, unlimitedPlan, onSubscribe, onSubscribeUnl
                 <Text as="p" tone="subdued">
                   {credits} credits
                 </Text>
-                <Button
-                  variant="primary"
-                  onClick={() => onSubscribe(pack.id, period)}
-                  loading={pack.id === pendingPackId}
-                  disabled={anyPending && pack.id !== pendingPackId}
-                >
-                  Choose {pack.label}
-                </Button>
               </BlockStack>
             </Card>
           );
@@ -77,13 +64,19 @@ export function PricingTable({ packs, unlimitedPlan, onSubscribe, onSubscribeUnl
               <Text as="p" tone="subdued">
                 Unlimited generations, fair use up to {unlimitedPlan.fairUseCreditsPerMonth?.toLocaleString()} credits/mo
               </Text>
-              <Button variant="primary" onClick={onSubscribeUnlimited} loading={isUnlimitedPending} disabled={anyPending && !isUnlimitedPending}>
-                Go Unlimited
-              </Button>
             </BlockStack>
           </Card>
         )}
       </InlineGrid>
+
+      <BlockStack gap="100" inlineAlign="start">
+        <Button variant="primary" onClick={onViewPlans}>
+          View plans &amp; subscribe
+        </Button>
+        <Text as="p" tone="subdued">
+          You&apos;ll choose and confirm your plan on Shopify&apos;s own billing page.
+        </Text>
+      </BlockStack>
     </BlockStack>
   );
 }

@@ -1,165 +1,92 @@
-// Shopify Billing API orchestration. Two purchase paths exist:
-//  - Credit packs (Starter/Growth/Scale, monthly or annual) and the Unlimited
-//    plan are recurring app subscriptions -> `appSubscriptionCreate`.
-//  - A custom any-dollar-amount credit top-up is a one-time purchase ->
-//    `appPurchaseOneTimeCreate`.
-// Both mutations are public-app-only and return a `confirmationUrl` the
-// merchant must be redirected to approve the charge on Shopify's own page —
-// this module only builds the mutation input and calls it; the route layer
-// handles the redirect.
+// Shopify App Pricing orchestration. This app is opted into Shopify App
+// Pricing (formerly "Managed Pricing") in Partner Dashboard, which means the
+// classic Billing API (appSubscriptionCreate/appPurchaseOneTimeCreate) is
+// categorically blocked for BOTH recurring and one-time charges — confirmed
+// live (every call 403'd regardless of the `test` flag) and against
+// shopify.dev's docs ("Once you opt in to Shopify App Pricing, you can't
+// create new recurring application charges using the Billing API").
 //
-// Crediting a shop only happens once a charge is ACTIVE (subscription) or
-// confirmed (one-time). Because Shopify does NOT fire APP_SUBSCRIPTIONS_UPDATE
-// on routine successful monthly auto-renewal (confirmed via shopify.dev), the
-// same `grantCreditsForCharge` entry point below is used both by the
-// initial-activation callback route AND by billingReconciliation.js's periodic
-// poll — billingChargesRepo.claimCharge makes a double-fire from those two call
-// sites a no-op instead of a double-grant.
+// So there is no "create a charge" call at all anymore: the merchant picks a
+// plan on Shopify's own hosted page (getPricingPlansUrl), and Shopify redirects
+// them back to this app's /billing page with a `plan_handle` query param.
+// confirmAppPricingPlan then verifies — via the Partner API, the ONLY source
+// of truth for a Shopify App Pricing subscription's status (the Admin API's
+// currentAppInstallation.activeSubscriptions doesn't see these at all) — that
+// the shop actually has a matching active subscription before granting
+// anything, rather than trusting the client-supplied plan_handle at face
+// value (which a merchant could otherwise forge to get free credits).
+//
+// A one-time custom-amount top-up has no equivalent under Shopify App Pricing
+// (its plan types are fixed/graduated/volume recurring, or usage-based via the
+// App Events API) — that purchase path is intentionally not offered any more;
+// see routes/api/billing.js and CustomAmountPreview.jsx.
+//
+// grantCreditsForCharge is the shared idempotent entry point used both by the
+// initial confirm-on-return call AND by billingReconciliation.js's periodic
+// poll (Shopify App Pricing doesn't fire a webhook on renewal either), keyed
+// by `app-pricing:${planHandle}:${currentBillingCycle.startTime}` so the same
+// billing cycle is never credited twice but a NEW cycle (a fresh startTime)
+// grants again.
 
-const { CREDIT_PACKS, UNLIMITED_PLAN, computeCreditsForAmount } = require('./billingPacks');
-const { ValidationError, PublishError } = require('../errors/AppError');
+const { CREDIT_PACKS, UNLIMITED_PLAN } = require('./billingPacks');
+const { resolvePlanFromHandle } = require('../config/appPricingPlans');
+const { SHOPIFY_APP_HANDLE } = require('../config/constants');
 
-const APP_SUBSCRIPTION_CREATE_MUTATION = `#graphql
-  mutation createAppSubscription($name: String!, $returnUrl: URL!, $test: Boolean, $lineItems: [AppSubscriptionLineItemInput!]!) {
-    appSubscriptionCreate(name: $name, returnUrl: $returnUrl, test: $test, lineItems: $lineItems) {
-      appSubscription { id }
-      confirmationUrl
-      userErrors { field message }
-    }
+const APP_AND_SHOP_ID_QUERY = `#graphql
+  query AppAndShopId {
+    currentAppInstallation { app { id } }
+    shop { id }
   }
 `;
 
-const APP_PURCHASE_ONE_TIME_CREATE_MUTATION = `#graphql
-  mutation createOneTimePurchase($name: String!, $price: MoneyInput!, $returnUrl: URL!, $test: Boolean) {
-    appPurchaseOneTimeCreate(name: $name, price: $price, returnUrl: $returnUrl, test: $test) {
-      appPurchaseOneTime { id }
-      confirmationUrl
-      userErrors { field message }
-    }
-  }
-`;
-
-/**
- * @param {{ id: string, label: string }} pack
- * @param {'monthly'|'annual'} period
- * @param {{ returnUrl: string, test: boolean }} opts
- */
-function buildSubscriptionInput(pack, period, { returnUrl, test }) {
-  const priceCents = period === 'annual' ? pack.annualPriceCents : pack.monthlyPriceCents;
-  return {
-    name: `AI UGC Generator ${pack.label} (${period === 'annual' ? 'Annual' : 'Monthly'})`,
-    returnUrl,
-    test,
-    lineItems: [
-      {
-        plan: {
-          appRecurringPricingDetails: {
-            price: { amount: (priceCents / 100).toFixed(2), currencyCode: 'USD' },
-            interval: period === 'annual' ? 'ANNUAL' : 'EVERY_30_DAYS',
-          },
-        },
-      },
-    ],
-  };
-}
-
-/** @param {{ returnUrl: string, test: boolean }} opts */
-function buildUnlimitedSubscriptionInput({ returnUrl, test }) {
-  return {
-    name: `AI UGC Generator ${UNLIMITED_PLAN.label}`,
-    returnUrl,
-    test,
-    lineItems: [
-      {
-        plan: {
-          appRecurringPricingDetails: {
-            price: { amount: (UNLIMITED_PLAN.monthlyPriceCents / 100).toFixed(2), currencyCode: 'USD' },
-            interval: 'EVERY_30_DAYS',
-          },
-        },
-      },
-    ],
-  };
-}
-
-/** @param {{ amountCents: number, returnUrl: string, test: boolean }} opts */
-function buildOneTimePurchaseInput({ amountCents, returnUrl, test }) {
-  return {
-    name: `AI UGC Generator custom credit top-up ($${(amountCents / 100).toFixed(2)})`,
-    price: { amount: (amountCents / 100).toFixed(2), currencyCode: 'USD' },
-    returnUrl,
-    test,
-  };
-}
-
-function extractUserErrors(payload) {
-  return payload?.userErrors ?? [];
+/** @param {string} shopDomain e.g. "my-store.myshopify.com" */
+function getPricingPlansUrl(shopDomain) {
+  const storeHandle = shopDomain.replace(/\.myshopify\.com$/, '');
+  return `https://admin.shopify.com/store/${storeHandle}/charges/${SHOPIFY_APP_HANDLE}/pricing_plans`;
 }
 
 /**
- * @param {{ shopsRepo: object, billingChargesRepo: object, getGraphqlClient: Function, isTestCharge: boolean, FieldValue: object }} deps
+ * @param {{ shopsRepo: object, billingChargesRepo: object, getGraphqlClient: Function, partnerApiClient: object, FieldValue: object }} deps
  */
-function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient, isTestCharge, FieldValue }) {
-  async function request(session, mutation, variables) {
+function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient, partnerApiClient, FieldValue }) {
+  async function getAppAndShopIds(session) {
     const client = getGraphqlClient(session);
-    const response = await client.request(mutation, { variables });
-    return response.data;
+    const response = await client.request(APP_AND_SHOP_ID_QUERY);
+    return { appId: response.data.currentAppInstallation.app.id, shopId: response.data.shop.id };
   }
 
   /**
-   * Starts a recurring subscription for a credit pack. Returns the
-   * confirmationUrl the merchant must be redirected to.
+   * Verifies (via the Partner API) that the shop actually holds an active
+   * subscription matching `planHandle` before granting anything.
+   * @returns {Promise<{ confirmed: boolean, reason?: string, plan?: string, granted?: boolean }>}
    */
-  async function createPackSubscription(session, { packId, period = 'monthly', returnUrl }) {
-    const pack = CREDIT_PACKS.find((p) => p.id === packId);
-    if (!pack) throw new ValidationError(`Unknown credit pack "${packId}"`);
+  async function confirmAppPricingPlan(session, { shopDomain, planHandle }) {
+    const resolved = resolvePlanFromHandle(planHandle);
+    if (!resolved) return { confirmed: false, reason: 'unknown_plan_handle' };
 
-    const input = buildSubscriptionInput(pack, period, { returnUrl, test: isTestCharge });
-    const data = await request(session, APP_SUBSCRIPTION_CREATE_MUTATION, input);
-    const userErrors = extractUserErrors(data?.appSubscriptionCreate);
-    if (userErrors.length > 0) {
-      throw new PublishError(userErrors.map((e) => e.message).join('; '), userErrors);
+    const { appId, shopId } = await getAppAndShopIds(session);
+    const subscription = await partnerApiClient.getActiveSubscription({ appId, shopId });
+    const matchesHandle = subscription?.items?.some((item) => item.handle === planHandle);
+    if (!subscription || !matchesHandle) {
+      return { confirmed: false, reason: 'no_matching_active_subscription' };
     }
-    return {
-      subscriptionId: data.appSubscriptionCreate.appSubscription.id,
-      confirmationUrl: data.appSubscriptionCreate.confirmationUrl,
-      pack,
-      period,
-    };
-  }
 
-  /** Starts the flat-rate Unlimited plan subscription. */
-  async function createUnlimitedSubscription(session, { returnUrl }) {
-    const input = buildUnlimitedSubscriptionInput({ returnUrl, test: isTestCharge });
-    const data = await request(session, APP_SUBSCRIPTION_CREATE_MUTATION, input);
-    const userErrors = extractUserErrors(data?.appSubscriptionCreate);
-    if (userErrors.length > 0) {
-      throw new PublishError(userErrors.map((e) => e.message).join('; '), userErrors);
-    }
-    return {
-      subscriptionId: data.appSubscriptionCreate.appSubscription.id,
-      confirmationUrl: data.appSubscriptionCreate.confirmationUrl,
-    };
-  }
+    const chargeKey = `app-pricing:${planHandle}:${subscription.currentBillingCycle.startTime}`;
 
-  /** Starts a one-time purchase for a custom credit top-up amount. */
-  async function createCustomPurchase(session, { amountCents, returnUrl }) {
-    computeCreditsForAmount(amountCents); // throws ValidationError below MIN_CUSTOM_PURCHASE_CENTS BEFORE any real charge is created
-    const input = buildOneTimePurchaseInput({ amountCents, returnUrl, test: isTestCharge });
-    const data = await request(session, APP_PURCHASE_ONE_TIME_CREATE_MUTATION, input);
-    const userErrors = extractUserErrors(data?.appPurchaseOneTimeCreate);
-    if (userErrors.length > 0) {
-      throw new PublishError(userErrors.map((e) => e.message).join('; '), userErrors);
+    if (resolved.unlimited) {
+      await activateUnlimitedPlan(shopDomain, planHandle);
+      return { confirmed: true, plan: 'unlimited' };
     }
-    return {
-      purchaseId: data.appPurchaseOneTimeCreate.appPurchaseOneTime.id,
-      confirmationUrl: data.appPurchaseOneTimeCreate.confirmationUrl,
-    };
+
+    const pack = CREDIT_PACKS.find((p) => p.id === resolved.packId);
+    const credits = resolved.period === 'annual' ? pack.annualCredits : pack.monthlyCredits;
+    const result = await grantCreditsForCharge(shopDomain, { chargeKey, credits, type: 'subscription' });
+    return { confirmed: true, ...result };
   }
 
   /**
    * Grants credits for a claimed charge, exactly once per `chargeKey` — the
-   * shared entry point for both the post-approval callback route and
+   * shared entry point for both the post-redirect confirm call and
    * billingReconciliation.js's renewal poll (see file header). A no-op if this
    * chargeKey was already processed.
    * @returns {Promise<{ granted: boolean }>}
@@ -171,20 +98,19 @@ function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient,
     return { granted: true };
   }
 
-  /** Marks a shop as being on the Unlimited plan once its subscription is active. */
-  async function activateUnlimitedPlan(shopDomain, subscriptionId) {
-    await shopsRepo.updateShop(shopDomain, { plan: 'unlimited', unlimitedSubscriptionId: subscriptionId });
+  /** Marks a shop as being on the Unlimited plan once its subscription is confirmed active. */
+  async function activateUnlimitedPlan(shopDomain, planHandle) {
+    await shopsRepo.updateShop(shopDomain, { plan: 'unlimited', unlimitedPlanHandle: planHandle });
   }
 
-  /** Reverts a shop to the metered plan on subscription cancellation/decline. */
+  /** Reverts a shop to the metered plan once its Unlimited subscription is no longer active. */
   async function deactivateUnlimitedPlan(shopDomain) {
-    await shopsRepo.updateShop(shopDomain, { plan: 'metered', unlimitedSubscriptionId: null });
+    await shopsRepo.updateShop(shopDomain, { plan: 'metered', unlimitedPlanHandle: null });
   }
 
   return {
-    createPackSubscription,
-    createUnlimitedSubscription,
-    createCustomPurchase,
+    getPricingPlansUrl,
+    confirmAppPricingPlan,
     grantCreditsForCharge,
     activateUnlimitedPlan,
     deactivateUnlimitedPlan,
@@ -192,29 +118,23 @@ function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient,
 }
 
 let singleton;
-/** Lazily builds the production singleton wired to the real Shopify GraphQL client. */
+/** Lazily builds the production singleton wired to the real Shopify GraphQL + Partner API clients. */
 function getBillingService() {
   if (!singleton) {
     const { getShopsRepo } = require('../repos/shopsRepo');
     const { getBillingChargesRepo } = require('../repos/billingChargesRepo');
     const { getShopify } = require('../config/shopify');
-    const { env } = require('../config/env');
+    const { getPartnerApiClient } = require('./partnerApiClient');
     const { FieldValue } = require('firebase-admin/firestore');
     singleton = createBillingService({
       shopsRepo: getShopsRepo(),
       billingChargesRepo: getBillingChargesRepo(),
       getGraphqlClient: (session) => new (getShopify().api.clients.Graphql)({ session }),
-      isTestCharge: env.NODE_ENV !== 'production',
+      partnerApiClient: getPartnerApiClient(),
       FieldValue,
     });
   }
   return singleton;
 }
 
-module.exports = {
-  createBillingService,
-  getBillingService,
-  buildSubscriptionInput,
-  buildUnlimitedSubscriptionInput,
-  buildOneTimePurchaseInput,
-};
+module.exports = { createBillingService, getBillingService, getPricingPlansUrl };

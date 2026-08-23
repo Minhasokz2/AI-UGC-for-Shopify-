@@ -48,13 +48,14 @@ describe('services/trialCreditsService', () => {
       expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a.myshopify.com', {
         googleVerified: true,
         verifiedEmail: 'merchant@example.com',
+        trialEligibilityLocked: true,
         creditBalance: expect.anything(),
       });
       expect(result).toEqual({ granted: true, credits: FREE_TRIAL_CREDITS });
     });
 
-    it('is a no-op when the shop is already verified (never re-grants)', async () => {
-      const shopsRepo = makeShopsRepo({ getShop: vi.fn().mockResolvedValue({ googleVerified: true }) });
+    it('is a no-op when the shop has already locked trial eligibility (never re-grants, even if googleVerified was reset by a sign-out)', async () => {
+      const shopsRepo = makeShopsRepo({ getShop: vi.fn().mockResolvedValue({ googleVerified: false, trialEligibilityLocked: true }) });
       const usedTrialEmailsRepo = makeUsedTrialEmailsRepo();
       const service = createTrialCreditsService({ shopsRepo, usedTrialEmailsRepo, FieldValue });
 
@@ -78,6 +79,7 @@ describe('services/trialCreditsService', () => {
       expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a.myshopify.com', {
         googleVerified: true,
         verifiedEmail: 'merchant@example.com',
+        trialEligibilityLocked: true,
       });
     });
 

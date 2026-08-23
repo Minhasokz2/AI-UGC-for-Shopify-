@@ -1,181 +1,158 @@
-const {
-  createBillingService,
-  buildSubscriptionInput,
-  buildUnlimitedSubscriptionInput,
-  buildOneTimePurchaseInput,
-} = require('../../../src/services/billingService');
-const { CREDIT_PACKS, UNLIMITED_PLAN } = require('../../../src/services/billingPacks');
-const { ValidationError, PublishError } = require('../../../src/errors/AppError');
+const { createBillingService } = require('../../../src/services/billingService');
+const { CREDIT_PACKS } = require('../../../src/services/billingPacks');
+const { PLAN_HANDLES } = require('../../../src/config/appPricingPlans');
 const { FieldValue } = require('../../helpers/fakeFirestore');
+
+const APP_GID = 'gid://shopify/App/1';
+const SHOP_GID = 'gid://shopify/Shop/1';
+
+function makeGraphqlClient() {
+  return { request: vi.fn().mockResolvedValue({ data: { currentAppInstallation: { app: { id: APP_GID } }, shop: { id: SHOP_GID } } }) };
+}
 
 function makeDeps(overrides = {}) {
   return {
     shopsRepo: { updateShop: vi.fn().mockResolvedValue(undefined) },
     billingChargesRepo: { claimCharge: vi.fn().mockResolvedValue({ claimed: true }) },
-    getGraphqlClient: vi.fn(),
-    isTestCharge: true,
+    getGraphqlClient: () => makeGraphqlClient(),
+    partnerApiClient: { getActiveSubscription: vi.fn().mockResolvedValue(null) },
     FieldValue,
     ...overrides,
   };
 }
 
 describe('services/billingService', () => {
-  describe('pure input builders', () => {
-    it('buildSubscriptionInput uses the monthly price/interval by default', () => {
-      const pack = CREDIT_PACKS.find((p) => p.id === 'growth');
-      const input = buildSubscriptionInput(pack, 'monthly', { returnUrl: 'https://x/return', test: true });
-      expect(input.lineItems[0].plan.appRecurringPricingDetails.interval).toBe('EVERY_30_DAYS');
-      expect(input.lineItems[0].plan.appRecurringPricingDetails.price).toEqual({ amount: '49.00', currencyCode: 'USD' });
-      expect(input.test).toBe(true);
-    });
-
-    it('buildSubscriptionInput switches to the annual price/interval', () => {
-      const pack = CREDIT_PACKS.find((p) => p.id === 'growth');
-      const input = buildSubscriptionInput(pack, 'annual', { returnUrl: 'https://x/return', test: false });
-      expect(input.lineItems[0].plan.appRecurringPricingDetails.interval).toBe('ANNUAL');
-      expect(input.lineItems[0].plan.appRecurringPricingDetails.price.amount).toBe('490.00');
-    });
-
-    it('buildUnlimitedSubscriptionInput prices the flat Unlimited plan', () => {
-      const input = buildUnlimitedSubscriptionInput({ returnUrl: 'https://x/return', test: true });
-      expect(input.lineItems[0].plan.appRecurringPricingDetails.price.amount).toBe(
-        (UNLIMITED_PLAN.monthlyPriceCents / 100).toFixed(2),
-      );
-    });
-
-    it('buildOneTimePurchaseInput prices a custom top-up amount', () => {
-      const input = buildOneTimePurchaseInput({ amountCents: 1234, returnUrl: 'https://x/return', test: true });
-      expect(input.price).toEqual({ amount: '12.34', currencyCode: 'USD' });
-    });
-  });
-
-  describe('createPackSubscription', () => {
-    it('throws ValidationError for an unknown pack id', async () => {
+  describe('getPricingPlansUrl', () => {
+    it('builds the Shopify-hosted pricing plan page URL from the shop domain and the app\'s handle', () => {
       const service = createBillingService(makeDeps());
-      await expect(
-        service.createPackSubscription({ shop: 's' }, { packId: 'not-a-pack', returnUrl: 'https://x' }),
-      ).rejects.toBeInstanceOf(ValidationError);
-    });
-
-    it('calls appSubscriptionCreate and returns the confirmationUrl/subscriptionId on success', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
-          data: {
-            appSubscriptionCreate: {
-              appSubscription: { id: 'gid://shopify/AppSubscription/1' },
-              confirmationUrl: 'https://admin.shopify.com/confirm/1',
-              userErrors: [],
-            },
-          },
-        }),
-      };
-      const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
-
-      const result = await service.createPackSubscription({ shop: 's' }, { packId: 'starter', returnUrl: 'https://x/return' });
-
-      expect(client.request).toHaveBeenCalledWith(
-        expect.stringContaining('appSubscriptionCreate'),
-        expect.objectContaining({ variables: expect.objectContaining({ returnUrl: 'https://x/return' }) }),
+      expect(service.getPricingPlansUrl('my-store.myshopify.com')).toBe(
+        'https://admin.shopify.com/store/my-store/charges/ai-ugc-gen-96a0b97f/pricing_plans',
       );
-      expect(result).toEqual(
-        expect.objectContaining({
-          subscriptionId: 'gid://shopify/AppSubscription/1',
-          confirmationUrl: 'https://admin.shopify.com/confirm/1',
-        }),
-      );
-    });
-
-    it('passes the injected isTestCharge flag straight through as the mutation\'s test variable', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
-          data: { appSubscriptionCreate: { appSubscription: { id: 'gid://x/1' }, confirmationUrl: 'https://x', userErrors: [] } },
-        }),
-      };
-      const service = createBillingService(makeDeps({ getGraphqlClient: () => client, isTestCharge: true }));
-
-      await service.createPackSubscription({ shop: 's' }, { packId: 'starter', returnUrl: 'https://x/return' });
-
-      expect(client.request).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ variables: expect.objectContaining({ test: true }) }));
-    });
-
-    it('throws PublishError when the mutation returns userErrors', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
-          data: { appSubscriptionCreate: { appSubscription: null, confirmationUrl: null, userErrors: [{ field: [], message: 'Invalid plan' }] } },
-        }),
-      };
-      const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
-
-      await expect(
-        service.createPackSubscription({ shop: 's' }, { packId: 'starter', returnUrl: 'https://x/return' }),
-      ).rejects.toBeInstanceOf(PublishError);
     });
   });
 
-  describe('createUnlimitedSubscription', () => {
-    it('calls appSubscriptionCreate for the flat-rate plan', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
-          data: {
-            appSubscriptionCreate: {
-              appSubscription: { id: 'gid://shopify/AppSubscription/2' },
-              confirmationUrl: 'https://admin.shopify.com/confirm/2',
-              userErrors: [],
-            },
-          },
-        }),
-      };
-      const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
+  describe('confirmAppPricingPlan', () => {
+    it('returns confirmed:false without granting anything for an unrecognized plan handle', async () => {
+      const service = createBillingService(makeDeps());
 
-      const result = await service.createUnlimitedSubscription({ shop: 's' }, { returnUrl: 'https://x/return' });
+      const result = await service.confirmAppPricingPlan({}, { shopDomain: 'shop-a.myshopify.com', planHandle: 'not-a-real-handle' });
 
-      expect(result.subscriptionId).toBe('gid://shopify/AppSubscription/2');
-    });
-  });
-
-  describe('createCustomPurchase', () => {
-    it('calls appPurchaseOneTimeCreate and returns the confirmationUrl/purchaseId', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
-          data: {
-            appPurchaseOneTimeCreate: {
-              appPurchaseOneTime: { id: 'gid://shopify/AppPurchaseOneTime/1' },
-              confirmationUrl: 'https://admin.shopify.com/confirm/3',
-              userErrors: [],
-            },
-          },
-        }),
-      };
-      const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
-
-      const result = await service.createCustomPurchase({ shop: 's' }, { amountCents: 1000, returnUrl: 'https://x/return' });
-
-      expect(result).toEqual(
-        expect.objectContaining({ purchaseId: 'gid://shopify/AppPurchaseOneTime/1', confirmationUrl: 'https://admin.shopify.com/confirm/3' }),
-      );
+      expect(result).toEqual({ confirmed: false, reason: 'unknown_plan_handle' });
     });
 
-    it('throws PublishError on userErrors', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
-          data: { appPurchaseOneTimeCreate: { appPurchaseOneTime: null, confirmationUrl: null, userErrors: [{ field: [], message: 'Amount too low' }] } },
-        }),
-      };
-      const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
+    it('returns confirmed:false when the Partner API reports no active subscription — never trusts the client-supplied plan_handle alone', async () => {
+      const growthHandle = 'growth-monthly-handle';
+      PLAN_HANDLES.growth.monthly = growthHandle;
+      try {
+        const partnerApiClient = { getActiveSubscription: vi.fn().mockResolvedValue(null) };
+        const service = createBillingService(makeDeps({ partnerApiClient }));
 
-      await expect(
-        service.createCustomPurchase({ shop: 's' }, { amountCents: 1000, returnUrl: 'https://x/return' }),
-      ).rejects.toBeInstanceOf(PublishError);
+        const result = await service.confirmAppPricingPlan({}, { shopDomain: 'shop-a.myshopify.com', planHandle: growthHandle });
+
+        expect(result).toEqual({ confirmed: false, reason: 'no_matching_active_subscription' });
+      } finally {
+        PLAN_HANDLES.growth.monthly = null;
+      }
     });
 
-    it('throws ValidationError below the minimum purchase amount WITHOUT ever creating a real charge', async () => {
-      const client = { request: vi.fn() };
-      const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
+    it('returns confirmed:false when the active subscription\'s items don\'t include the claimed handle', async () => {
+      const growthHandle = 'growth-monthly-handle';
+      PLAN_HANDLES.growth.monthly = growthHandle;
+      try {
+        const partnerApiClient = {
+          getActiveSubscription: vi.fn().mockResolvedValue({
+            currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
+            items: [{ handle: 'some-other-handle' }],
+          }),
+        };
+        const service = createBillingService(makeDeps({ partnerApiClient }));
 
-      await expect(
-        service.createCustomPurchase({ shop: 's' }, { amountCents: 1, returnUrl: 'https://x/return' }),
-      ).rejects.toBeInstanceOf(ValidationError);
-      expect(client.request).not.toHaveBeenCalled();
+        const result = await service.confirmAppPricingPlan({}, { shopDomain: 'shop-a.myshopify.com', planHandle: growthHandle });
+
+        expect(result).toEqual({ confirmed: false, reason: 'no_matching_active_subscription' });
+      } finally {
+        PLAN_HANDLES.growth.monthly = null;
+      }
+    });
+
+    it('grants the pack\'s credits once the Partner API confirms a matching active subscription', async () => {
+      const growth = CREDIT_PACKS.find((p) => p.id === 'growth');
+      const growthHandle = 'growth-monthly-handle';
+      PLAN_HANDLES.growth.monthly = growthHandle;
+      try {
+        const partnerApiClient = {
+          getActiveSubscription: vi.fn().mockResolvedValue({
+            currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
+            items: [{ handle: growthHandle }],
+          }),
+        };
+        const billingChargesRepo = { claimCharge: vi.fn().mockResolvedValue({ claimed: true }) };
+        const shopsRepo = { updateShop: vi.fn().mockResolvedValue(undefined) };
+        const service = createBillingService(makeDeps({ partnerApiClient, billingChargesRepo, shopsRepo }));
+
+        const result = await service.confirmAppPricingPlan({}, { shopDomain: 'shop-a.myshopify.com', planHandle: growthHandle });
+
+        expect(result).toEqual({ confirmed: true, granted: true });
+        expect(billingChargesRepo.claimCharge).toHaveBeenCalledWith(
+          `app-pricing:${growthHandle}:2026-01-01T00:00:00Z`,
+          { shopDomain: 'shop-a.myshopify.com', credits: growth.monthlyCredits, type: 'subscription' },
+        );
+        expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a.myshopify.com', { creditBalance: expect.anything() });
+      } finally {
+        PLAN_HANDLES.growth.monthly = null;
+      }
+    });
+
+    it('is idempotent — confirming the same billing cycle twice grants credits only once', async () => {
+      const growthHandle = 'growth-monthly-handle';
+      PLAN_HANDLES.growth.monthly = growthHandle;
+      try {
+        const partnerApiClient = {
+          getActiveSubscription: vi.fn().mockResolvedValue({
+            currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
+            items: [{ handle: growthHandle }],
+          }),
+        };
+        let claimed = false;
+        const billingChargesRepo = {
+          claimCharge: vi.fn().mockImplementation(() => {
+            const result = { claimed: !claimed };
+            claimed = true;
+            return Promise.resolve(result);
+          }),
+        };
+        const service = createBillingService(makeDeps({ partnerApiClient, billingChargesRepo }));
+
+        const first = await service.confirmAppPricingPlan({}, { shopDomain: 'shop-a.myshopify.com', planHandle: growthHandle });
+        const second = await service.confirmAppPricingPlan({}, { shopDomain: 'shop-a.myshopify.com', planHandle: growthHandle });
+
+        expect(first).toEqual({ confirmed: true, granted: true });
+        expect(second).toEqual({ confirmed: true, granted: false });
+      } finally {
+        PLAN_HANDLES.growth.monthly = null;
+      }
+    });
+
+    it('activates the Unlimited plan (no credit grant) once confirmed', async () => {
+      const unlimitedHandle = 'unlimited-handle';
+      PLAN_HANDLES.unlimited.monthly = unlimitedHandle;
+      try {
+        const partnerApiClient = {
+          getActiveSubscription: vi.fn().mockResolvedValue({
+            currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
+            items: [{ handle: unlimitedHandle }],
+          }),
+        };
+        const shopsRepo = { updateShop: vi.fn().mockResolvedValue(undefined) };
+        const service = createBillingService(makeDeps({ partnerApiClient, shopsRepo }));
+
+        const result = await service.confirmAppPricingPlan({}, { shopDomain: 'shop-a.myshopify.com', planHandle: unlimitedHandle });
+
+        expect(result).toEqual({ confirmed: true, plan: 'unlimited' });
+        expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a.myshopify.com', { plan: 'unlimited', unlimitedPlanHandle: unlimitedHandle });
+      } finally {
+        PLAN_HANDLES.unlimited.monthly = null;
+      }
     });
   });
 
@@ -205,22 +182,22 @@ describe('services/billingService', () => {
   });
 
   describe('activateUnlimitedPlan / deactivateUnlimitedPlan', () => {
-    it('activateUnlimitedPlan sets plan to unlimited and records the subscription id', async () => {
+    it('activateUnlimitedPlan sets plan to unlimited and records the plan handle', async () => {
       const shopsRepo = { updateShop: vi.fn().mockResolvedValue(undefined) };
       const service = createBillingService(makeDeps({ shopsRepo }));
 
-      await service.activateUnlimitedPlan('shop-a', 'gid://shopify/AppSubscription/2');
+      await service.activateUnlimitedPlan('shop-a', 'unlimited-handle');
 
-      expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a', { plan: 'unlimited', unlimitedSubscriptionId: 'gid://shopify/AppSubscription/2' });
+      expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a', { plan: 'unlimited', unlimitedPlanHandle: 'unlimited-handle' });
     });
 
-    it('deactivateUnlimitedPlan reverts plan to metered and clears the subscription id', async () => {
+    it('deactivateUnlimitedPlan reverts plan to metered and clears the plan handle', async () => {
       const shopsRepo = { updateShop: vi.fn().mockResolvedValue(undefined) };
       const service = createBillingService(makeDeps({ shopsRepo }));
 
       await service.deactivateUnlimitedPlan('shop-a');
 
-      expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a', { plan: 'metered', unlimitedSubscriptionId: null });
+      expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a', { plan: 'metered', unlimitedPlanHandle: null });
     });
   });
 });

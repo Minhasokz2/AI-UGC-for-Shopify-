@@ -24,6 +24,12 @@ const JOBS_QUERY_CANDIDATE_WINDOW_MULTIPLIER = 4;
 // Trial credits
 const FREE_TRIAL_CREDITS = 10;
 
+// Shopify App Pricing — the app's own handle from shopify.app.toml, needed to
+// build the hosted pricing-plan page URL. A code constant, not an env var:
+// changing it is a deliberate reviewed change tied to the Partner Dashboard
+// app registration, exactly like CURRENT_API_VERSION in config/shopify.js.
+const SHOPIFY_APP_HANDLE = 'ai-ugc-gen-96a0b97f';
+
 module.exports = {
   JOB_TERMINAL_STATUSES,
   BATCH_TERMINAL_STATUSES,
@@ -36,4 +42,5 @@ module.exports = {
   JOBS_QUERY_CANDIDATE_WINDOW_MIN,
   JOBS_QUERY_CANDIDATE_WINDOW_MULTIPLIER,
   FREE_TRIAL_CREDITS,
+  SHOPIFY_APP_HANDLE,
 };

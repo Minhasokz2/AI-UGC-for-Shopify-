@@ -26,7 +26,8 @@ const { createImageOptimizerUsageRepo } = require('./repos/imageOptimizerUsageRe
 const { createCreditsService } = require('./services/credits');
 const { createPublishService } = require('./services/publishService');
 const { createBillingService } = require('./services/billingService');
-const { createBillingReconciliation, creditsForPack } = require('./services/billingReconciliation');
+const { createBillingReconciliation } = require('./services/billingReconciliation');
+const { createPartnerApiClient } = require('./services/partnerApiClient');
 const { createReferralsService } = require('./services/referralsService');
 const { createTrialCreditsService } = require('./services/trialCreditsService');
 const { createImageOptimizerQuota } = require('./services/imageOptimizerQuota');
@@ -56,6 +57,10 @@ function buildDependencies({
   googleAuth = require('./services/googleAuth'),
   brandStyle = require('./services/brandStyle'),
   emailService = require('./services/emailService'),
+  partnerApiClient = createPartnerApiClient({
+    organizationId: env.SHOPIFY_PARTNER_ORGANIZATION_ID,
+    accessToken: env.SHOPIFY_PARTNER_API_TOKEN,
+  }),
   logger = require('./config/logger').logger,
 }) {
   const jobsRepo = createJobsRepo({ db, FieldValue });
@@ -85,15 +90,15 @@ function buildDependencies({
     shopsRepo,
     billingChargesRepo,
     getGraphqlClient,
-    isTestCharge: env.BILLING_TEST_MODE === 'true',
+    partnerApiClient,
     FieldValue,
   });
   const billingReconciliation = createBillingReconciliation({
     shopsRepo,
     billingService,
     getGraphqlClient,
+    partnerApiClient,
     getSessionForShop,
-    creditsForPack,
     log: (fields, message) => logger.error(fields, message),
   });
   const referralsService = createReferralsService({ shopsRepo, referralsRepo });

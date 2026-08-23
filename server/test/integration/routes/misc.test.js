@@ -216,4 +216,18 @@ describe('integration: Google Sign-In popup flow', () => {
     expect(res.status).toBe(200);
     expect(res.text).toContain("type: \"error\"");
   });
+
+  it('POST /api/auth/google-sign-out clears googleVerified/verifiedEmail but never trialEligibilityLocked, so the trial can\'t be re-granted', async () => {
+    const { app, db } = buildTestApp();
+    await seedShop(db, { googleVerified: true, verifiedEmail: 'merchant@example.com', trialEligibilityLocked: true, creditBalance: 10 });
+
+    const res = await request(app).post('/api/auth/google-sign-out');
+
+    expect(res.status).toBe(204);
+    const shop = (await db.collection('shops').doc(SHOP).get()).data();
+    expect(shop.googleVerified).toBe(false);
+    expect(shop.verifiedEmail).toBe(null);
+    expect(shop.trialEligibilityLocked).toBe(true);
+    expect(shop.creditBalance).toBe(10);
+  });
 });

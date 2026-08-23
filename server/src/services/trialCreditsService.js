@@ -36,7 +36,7 @@ function createTrialCreditsService({ shopsRepo, usedTrialEmailsRepo, FieldValue 
    */
   async function grantTrialIfEligible({ shopDomain, email }) {
     const shop = await shopsRepo.getShop(shopDomain);
-    if (shop?.googleVerified) {
+    if (shop?.trialEligibilityLocked) {
       return { granted: false, reason: 'shop_already_verified' };
     }
 
@@ -45,13 +45,14 @@ function createTrialCreditsService({ shopsRepo, usedTrialEmailsRepo, FieldValue 
     if (!claim.claimed) {
       // The Google identity was already spent on a trial elsewhere — the sign-in
       // itself still counts (unlocks the app for this shop), but no free credits.
-      await shopsRepo.updateShop(shopDomain, { googleVerified: true, verifiedEmail: email });
+      await shopsRepo.updateShop(shopDomain, { googleVerified: true, verifiedEmail: email, trialEligibilityLocked: true });
       return { granted: false, reason: 'email_already_used', existingShopDomain: claim.existingShopDomain };
     }
 
     await shopsRepo.updateShop(shopDomain, {
       googleVerified: true,
       verifiedEmail: email,
+      trialEligibilityLocked: true,
       creditBalance: FieldValue.increment(FREE_TRIAL_CREDITS),
     });
     return { granted: true, credits: FREE_TRIAL_CREDITS };

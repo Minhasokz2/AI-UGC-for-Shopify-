@@ -2,31 +2,30 @@ const { DeliveryMethod } = require('@shopify/shopify-api');
 const { createWebhookHandlers } = require('../../../src/services/webhookHandlers');
 const { env } = require('../../../src/config/env');
 
-function makeDeps({ sessions = [], shop = {} } = {}) {
+function makeDeps({ sessions = [] } = {}) {
   return {
     shopsRepo: {
       markUninstalled: vi.fn().mockResolvedValue(undefined),
       updateShop: vi.fn().mockResolvedValue(undefined),
-      getShop: vi.fn().mockResolvedValue(shop),
     },
     productsRepo: { deleteAllForShop: vi.fn().mockResolvedValue(undefined) },
     sessionStorage: {
       findSessionsByShop: vi.fn().mockResolvedValue(sessions),
       deleteSessions: vi.fn().mockResolvedValue(undefined),
     },
-    billingService: { deactivateUnlimitedPlan: vi.fn().mockResolvedValue(undefined) },
   };
 }
 
 describe('services/webhookHandlers', () => {
-  it('registers all four GDPR-mandatory topics plus APP_SUBSCRIPTIONS_UPDATE as Http handlers on the configured webhook path', () => {
+  it('registers all four GDPR-mandatory topics as Http handlers on the configured webhook path (Shopify App Pricing has no subscription webhook — see billingReconciliation.js)', () => {
     const handlers = createWebhookHandlers(makeDeps());
 
-    for (const topic of ['APP_UNINSTALLED', 'SHOP_REDACT', 'CUSTOMERS_REDACT', 'CUSTOMERS_DATA_REQUEST', 'APP_SUBSCRIPTIONS_UPDATE']) {
+    for (const topic of ['APP_UNINSTALLED', 'SHOP_REDACT', 'CUSTOMERS_REDACT', 'CUSTOMERS_DATA_REQUEST']) {
       expect(handlers[topic].deliveryMethod).toBe(DeliveryMethod.Http);
       expect(handlers[topic].callbackUrl).toBe(env.SHOPIFY_WEBHOOK_PATH);
       expect(typeof handlers[topic].callback).toBe('function');
     }
+    expect(handlers.APP_SUBSCRIPTIONS_UPDATE).toBeUndefined();
   });
 
   it('APP_UNINSTALLED marks the shop uninstalled', async () => {
@@ -77,54 +76,5 @@ describe('services/webhookHandlers', () => {
     expect(deps.shopsRepo.markUninstalled).not.toHaveBeenCalled();
     expect(deps.shopsRepo.updateShop).not.toHaveBeenCalled();
     expect(deps.productsRepo.deleteAllForShop).not.toHaveBeenCalled();
-  });
-
-  describe('APP_SUBSCRIPTIONS_UPDATE', () => {
-    const body = (status) => JSON.stringify({ app_subscription: { admin_graphql_api_id: 'gid://shopify/AppSubscription/9', status } });
-
-    it('deactivates the Unlimited plan when its own current subscription is cancelled', async () => {
-      const deps = makeDeps({ shop: { plan: 'unlimited', unlimitedSubscriptionId: 'gid://shopify/AppSubscription/9' } });
-      const handlers = createWebhookHandlers(deps);
-
-      await handlers.APP_SUBSCRIPTIONS_UPDATE.callback('app_subscriptions/update', 'shop-a.myshopify.com', body('CANCELLED'), 'wh-5', '2026-07');
-
-      expect(deps.billingService.deactivateUnlimitedPlan).toHaveBeenCalledWith('shop-a.myshopify.com');
-    });
-
-    it.each(['EXPIRED', 'FROZEN', 'DECLINED'])('also deactivates on a %s status', async (status) => {
-      const deps = makeDeps({ shop: { plan: 'unlimited', unlimitedSubscriptionId: 'gid://shopify/AppSubscription/9' } });
-      const handlers = createWebhookHandlers(deps);
-
-      await handlers.APP_SUBSCRIPTIONS_UPDATE.callback('app_subscriptions/update', 'shop-a.myshopify.com', body(status), 'wh-5', '2026-07');
-
-      expect(deps.billingService.deactivateUnlimitedPlan).toHaveBeenCalled();
-    });
-
-    it('does nothing for an ACTIVE status transition (e.g. initial activation)', async () => {
-      const deps = makeDeps({ shop: { plan: 'metered' } });
-      const handlers = createWebhookHandlers(deps);
-
-      await handlers.APP_SUBSCRIPTIONS_UPDATE.callback('app_subscriptions/update', 'shop-a.myshopify.com', body('ACTIVE'), 'wh-5', '2026-07');
-
-      expect(deps.billingService.deactivateUnlimitedPlan).not.toHaveBeenCalled();
-    });
-
-    it('does nothing when the shop is not currently on the Unlimited plan', async () => {
-      const deps = makeDeps({ shop: { plan: 'metered' } });
-      const handlers = createWebhookHandlers(deps);
-
-      await handlers.APP_SUBSCRIPTIONS_UPDATE.callback('app_subscriptions/update', 'shop-a.myshopify.com', body('CANCELLED'), 'wh-5', '2026-07');
-
-      expect(deps.billingService.deactivateUnlimitedPlan).not.toHaveBeenCalled();
-    });
-
-    it('does nothing when the event is for a DIFFERENT, already-superseded subscription id', async () => {
-      const deps = makeDeps({ shop: { plan: 'unlimited', unlimitedSubscriptionId: 'gid://shopify/AppSubscription/NEW' } });
-      const handlers = createWebhookHandlers(deps);
-
-      await handlers.APP_SUBSCRIPTIONS_UPDATE.callback('app_subscriptions/update', 'shop-a.myshopify.com', body('CANCELLED'), 'wh-5', '2026-07');
-
-      expect(deps.billingService.deactivateUnlimitedPlan).not.toHaveBeenCalled();
-    });
   });
 });

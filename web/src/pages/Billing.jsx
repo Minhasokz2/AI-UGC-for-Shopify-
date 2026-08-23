@@ -5,14 +5,10 @@ import { PageSkeleton } from '../components/layout/PageSkeleton.jsx';
 import { LoadingState } from '../components/feedback/LoadingState.jsx';
 import { ErrorState } from '../components/feedback/ErrorState.jsx';
 import { PricingTable } from '../components/billing/PricingTable.jsx';
-import { CustomAmountPreview } from '../components/billing/CustomAmountPreview.jsx';
 import {
   useBillingStatus,
   useBillingPacks,
-  useSubscribeToPack,
-  useSubscribeUnlimited,
-  useCustomPurchase,
-  useConfirmCharge,
+  useConfirmAppPricingPlan,
   redirectTopLevel,
 } from '../hooks/usePricingPreview.js';
 import { useAppBridgeToast } from '../hooks/useAppBridgeToast.js';
@@ -22,60 +18,41 @@ export function Billing() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: status, isLoading, isError, error } = useBillingStatus();
   const { data: packsData } = useBillingPacks();
-  const subscribeToPack = useSubscribeToPack();
-  const subscribeUnlimited = useSubscribeUnlimited();
-  const customPurchase = useCustomPurchase();
-  const confirmCharge = useConfirmCharge();
-  const { showApiError, showSuccess } = useAppBridgeToast();
+  const confirmAppPricingPlan = useConfirmAppPricingPlan();
+  const { showApiError, showSuccess, showError } = useAppBridgeToast();
   const queryClient = useQueryClient();
 
-  // After Shopify redirects the merchant back from the confirmation page,
-  // the returnUrl (server-controlled, currently <APP_URL>/billing) carries
-  // Shopify's own query params — commonly charge_id.
+  // After Shopify redirects the merchant back from its hosted pricing page,
+  // the redirection URL (configured per-plan in Partner Dashboard, currently
+  // <APP_URL>/billing) carries a `plan_handle` query param. The server never
+  // trusts this param alone — it re-verifies against the Partner API before
+  // granting anything (see billingService.confirmAppPricingPlan).
   useEffect(() => {
-    const chargeId = searchParams.get('charge_id');
-    if (!chargeId) return;
+    const planHandle = searchParams.get('plan_handle');
+    if (!planHandle) return;
 
-    confirmCharge
-      .mutateAsync({ chargeId })
-      .then(() => {
+    confirmAppPricingPlan
+      .mutateAsync({ planHandle })
+      .then((result) => {
         queryClient.invalidateQueries({ queryKey: ['shopStatus'] });
-        showSuccess('Billing confirmed.');
+        if (result.confirmed) {
+          showSuccess('Billing confirmed.');
+        } else {
+          showError("Couldn't confirm your plan yet — it can take a moment to activate. Refresh in a bit.");
+        }
       })
       .catch((err) => showApiError(err))
       .finally(() => {
         const next = new URLSearchParams(searchParams);
-        next.delete('charge_id');
+        next.delete('plan_handle');
+        next.delete('shop');
         setSearchParams(next, { replace: true });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  async function handleSubscribe(packId, period) {
-    try {
-      const { confirmationUrl } = await subscribeToPack.mutateAsync({ packId, period });
-      redirectTopLevel(confirmationUrl);
-    } catch (err) {
-      showApiError(err);
-    }
-  }
-
-  async function handleSubscribeUnlimited() {
-    try {
-      const { confirmationUrl } = await subscribeUnlimited.mutateAsync();
-      redirectTopLevel(confirmationUrl);
-    } catch (err) {
-      showApiError(err);
-    }
-  }
-
-  async function handleCustomPurchase(amountCents) {
-    try {
-      const { confirmationUrl } = await customPurchase.mutateAsync({ amountCents });
-      redirectTopLevel(confirmationUrl);
-    } catch (err) {
-      showApiError(err);
-    }
+  function handleViewPlans() {
+    redirectTopLevel(packsData.pricingPlansUrl);
   }
 
   if (isLoading) return <PageSkeleton title="Billing"><LoadingState label="Loading billing…" /></PageSkeleton>;
@@ -93,25 +70,9 @@ export function Billing() {
 
         {packsData && (
           <Card>
-            <PricingTable
-              packs={packsData.packs}
-              unlimitedPlan={packsData.unlimitedPlan}
-              onSubscribe={handleSubscribe}
-              onSubscribeUnlimited={handleSubscribeUnlimited}
-              pendingPackId={subscribeToPack.isPending ? subscribeToPack.variables?.packId : undefined}
-              isUnlimitedPending={subscribeUnlimited.isPending}
-            />
+            <PricingTable packs={packsData.packs} unlimitedPlan={packsData.unlimitedPlan} onViewPlans={handleViewPlans} />
           </Card>
         )}
-
-        <Card>
-          <BlockStack gap="200">
-            <Text as="h3" variant="headingSm">
-              Custom top-up
-            </Text>
-            <CustomAmountPreview onPurchase={handleCustomPurchase} isPending={customPurchase.isPending} />
-          </BlockStack>
-        </Card>
       </BlockStack>
     </PageSkeleton>
   );

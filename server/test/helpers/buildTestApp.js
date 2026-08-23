@@ -65,7 +65,7 @@ function createFakeShopify({ session = { shop: 'test-shop.myshopify.com', access
 }
 
 /**
- * @param {{ shopify?: object, cloudinaryService?: object, googleAuth?: object, brandStyle?: object, emailService?: object, jobWorker?: object, imageOptimizerWorker?: object }} [overrides]
+ * @param {{ shopify?: object, cloudinaryService?: object, googleAuth?: object, brandStyle?: object, emailService?: object, partnerApiClient?: object, jobWorker?: object, imageOptimizerWorker?: object }} [overrides]
  * @returns {{ app: object, db: object, deps: object }}
  */
 function buildTestApp(overrides = {}) {
@@ -80,6 +80,10 @@ function buildTestApp(overrides = {}) {
     googleAuth: overrides.googleAuth,
     brandStyle: overrides.brandStyle,
     emailService: overrides.emailService,
+    // Defaults to a stub reporting no active subscription — never a real
+    // Partner API call from a test. Pass a fake to exercise the confirm/
+    // reconciliation paths that actually check subscription status.
+    partnerApiClient: overrides.partnerApiClient || { getActiveSubscription: async () => null },
   });
 
   // Real workers make real outbound calls to fal.ai/WaveSpeed/etc as soon as

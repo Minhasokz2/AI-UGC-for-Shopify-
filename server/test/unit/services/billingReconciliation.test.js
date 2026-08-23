@@ -1,168 +1,157 @@
-const { createBillingReconciliation, creditsForPack } = require('../../../src/services/billingReconciliation');
-const { CREDIT_PACKS, UNLIMITED_PLAN } = require('../../../src/services/billingPacks');
+const { createBillingReconciliation } = require('../../../src/services/billingReconciliation');
+const { CREDIT_PACKS } = require('../../../src/services/billingPacks');
+const { PLAN_HANDLES } = require('../../../src/config/appPricingPlans');
+
+const APP_GID = 'gid://shopify/App/1';
+const SHOP_GID = 'gid://shopify/Shop/1';
+
+function makeGraphqlClient() {
+  return { request: vi.fn().mockResolvedValue({ data: { currentAppInstallation: { app: { id: APP_GID } }, shop: { id: SHOP_GID } } }) };
+}
 
 function makeDeps(overrides = {}) {
   return {
-    shopsRepo: { listInstalledShops: vi.fn() },
-    billingService: { grantCreditsForCharge: vi.fn().mockResolvedValue({ granted: true }) },
-    getGraphqlClient: vi.fn(),
-    getSessionForShop: vi.fn().mockResolvedValue({ shop: 'shop-a.myshopify.com', accessToken: 'tok' }),
-    creditsForPack: vi.fn().mockReturnValue(600),
-    log: vi.fn(),
+    shopsRepo: { listInstalledShops: vi.fn().mockResolvedValue([]) },
+    billingService: {
+      grantCreditsForCharge: vi.fn().mockResolvedValue({ granted: true }),
+      activateUnlimitedPlan: vi.fn().mockResolvedValue(undefined),
+      deactivateUnlimitedPlan: vi.fn().mockResolvedValue(undefined),
+    },
+    getGraphqlClient: () => makeGraphqlClient(),
+    partnerApiClient: { getActiveSubscription: vi.fn().mockResolvedValue(null) },
+    getSessionForShop: vi.fn().mockResolvedValue({ id: 'session-1' }),
     ...overrides,
   };
 }
 
 describe('services/billingReconciliation', () => {
-  describe('creditsForPack', () => {
-    it('resolves a subscription name containing a pack label to that pack\'s monthly credits', () => {
-      const pack = CREDIT_PACKS.find((p) => p.id === 'growth');
-      expect(creditsForPack(`AI UGC Generator ${pack.label} (Monthly)`)).toBe(pack.monthlyCredits);
-    });
-
-    it('resolves an "(Annual)" subscription name to the pack\'s ANNUAL credits, not monthly — an annual subscriber already paid for a full year', () => {
-      const pack = CREDIT_PACKS.find((p) => p.id === 'growth');
-      expect(creditsForPack(`AI UGC Generator ${pack.label} (Annual)`)).toBe(pack.annualCredits);
-      expect(pack.annualCredits).not.toBe(pack.monthlyCredits);
-    });
-
-    it('resolves the Unlimited plan to 0 (never draws down a balance)', () => {
-      expect(creditsForPack(`AI UGC Generator ${UNLIMITED_PLAN.label}`)).toBe(0);
-    });
-
-    it('returns null for a name matching no known pack/plan', () => {
-      expect(creditsForPack('Some Unrelated Charge')).toBeNull();
-    });
-  });
-
   describe('reconcileShop', () => {
-    it('skips a shop with no offline session', async () => {
+    it('skips a shop with no stored session', async () => {
       const deps = makeDeps({ getSessionForShop: vi.fn().mockResolvedValue(undefined) });
       const reconciliation = createBillingReconciliation(deps);
 
-      const result = await reconciliation.reconcileShop({ id: 'shop-a.myshopify.com' });
+      const result = await reconciliation.reconcileShop({ shopDomain: 'shop-a.myshopify.com' });
 
-      expect(result).toEqual(expect.objectContaining({ shopDomain: 'shop-a.myshopify.com', granted: 0, skipped: true }));
+      expect(result).toEqual({ shopDomain: 'shop-a.myshopify.com', granted: 0, skipped: true, reason: 'no_session' });
     });
 
-    it('grants credits for each ACTIVE subscription using the subscription+period as the charge key', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
-          data: {
-            currentAppInstallation: {
-              activeSubscriptions: [
-                { id: 'gid://shopify/AppSubscription/1', name: 'AI UGC Generator Growth (Monthly)', status: 'ACTIVE', currentPeriodEnd: '2026-09-01' },
-              ],
-            },
-          },
-        }),
+    it('grants a pack renewal for an item whose handle matches a configured plan', async () => {
+      const growth = CREDIT_PACKS.find((p) => p.id === 'growth');
+      const growthHandle = 'growth-monthly-handle';
+      PLAN_HANDLES.growth.monthly = growthHandle;
+      try {
+        const partnerApiClient = {
+          getActiveSubscription: vi.fn().mockResolvedValue({
+            currentBillingCycle: { startTime: '2026-02-01T00:00:00Z' },
+            items: [{ handle: growthHandle }],
+          }),
+        };
+        const billingService = {
+          grantCreditsForCharge: vi.fn().mockResolvedValue({ granted: true }),
+          activateUnlimitedPlan: vi.fn(),
+          deactivateUnlimitedPlan: vi.fn(),
+        };
+        const reconciliation = createBillingReconciliation(makeDeps({ partnerApiClient, billingService }));
+
+        const result = await reconciliation.reconcileShop({ shopDomain: 'shop-a.myshopify.com', plan: 'metered' });
+
+        expect(billingService.grantCreditsForCharge).toHaveBeenCalledWith('shop-a.myshopify.com', {
+          chargeKey: `app-pricing:${growthHandle}:2026-02-01T00:00:00Z`,
+          credits: growth.monthlyCredits,
+          type: 'renewal',
+        });
+        expect(result).toEqual({ shopDomain: 'shop-a.myshopify.com', granted: 1, skipped: false });
+      } finally {
+        PLAN_HANDLES.growth.monthly = null;
+      }
+    });
+
+    it('activates the Unlimited plan for a matching item, without granting credits', async () => {
+      const unlimitedHandle = 'unlimited-handle';
+      PLAN_HANDLES.unlimited.monthly = unlimitedHandle;
+      try {
+        const partnerApiClient = {
+          getActiveSubscription: vi.fn().mockResolvedValue({
+            currentBillingCycle: { startTime: '2026-02-01T00:00:00Z' },
+            items: [{ handle: unlimitedHandle }],
+          }),
+        };
+        const billingService = {
+          grantCreditsForCharge: vi.fn(),
+          activateUnlimitedPlan: vi.fn().mockResolvedValue(undefined),
+          deactivateUnlimitedPlan: vi.fn(),
+        };
+        const reconciliation = createBillingReconciliation(makeDeps({ partnerApiClient, billingService }));
+
+        const result = await reconciliation.reconcileShop({ shopDomain: 'shop-a.myshopify.com', plan: 'metered' });
+
+        expect(billingService.activateUnlimitedPlan).toHaveBeenCalledWith('shop-a.myshopify.com', unlimitedHandle);
+        expect(billingService.grantCreditsForCharge).not.toHaveBeenCalled();
+        expect(result.granted).toBe(0);
+      } finally {
+        PLAN_HANDLES.unlimited.monthly = null;
+      }
+    });
+
+    it('reverts a churned Unlimited-plan shop to metered when there is no active subscription anymore', async () => {
+      const billingService = {
+        grantCreditsForCharge: vi.fn(),
+        activateUnlimitedPlan: vi.fn(),
+        deactivateUnlimitedPlan: vi.fn().mockResolvedValue(undefined),
       };
-      const deps = makeDeps({ getGraphqlClient: () => client });
-      const reconciliation = createBillingReconciliation(deps);
+      const partnerApiClient = { getActiveSubscription: vi.fn().mockResolvedValue(null) };
+      const reconciliation = createBillingReconciliation(makeDeps({ partnerApiClient, billingService }));
 
-      const result = await reconciliation.reconcileShop({ id: 'shop-a.myshopify.com' });
+      await reconciliation.reconcileShop({ shopDomain: 'shop-a.myshopify.com', plan: 'unlimited' });
 
-      expect(deps.billingService.grantCreditsForCharge).toHaveBeenCalledWith('shop-a.myshopify.com', {
-        chargeKey: 'gid://shopify/AppSubscription/1:2026-09-01',
-        credits: 600,
-        type: 'renewal',
-      });
-      expect(result).toEqual({ shopDomain: 'shop-a.myshopify.com', granted: 1, skipped: false });
+      expect(billingService.deactivateUnlimitedPlan).toHaveBeenCalledWith('shop-a.myshopify.com');
     });
 
-    it('ignores non-ACTIVE subscriptions and subscriptions with no known credit mapping', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
-          data: {
-            currentAppInstallation: {
-              activeSubscriptions: [
-                { id: 'sub-1', name: 'AI UGC Generator Growth (Monthly)', status: 'CANCELLED', currentPeriodEnd: '2026-09-01' },
-                { id: 'sub-2', name: 'Unknown Plan', status: 'ACTIVE', currentPeriodEnd: '2026-09-01' },
-              ],
-            },
-          },
-        }),
+    it('does nothing when there is no active subscription and the shop is already metered', async () => {
+      const billingService = {
+        grantCreditsForCharge: vi.fn(),
+        activateUnlimitedPlan: vi.fn(),
+        deactivateUnlimitedPlan: vi.fn(),
       };
-      const deps = makeDeps({
-        getGraphqlClient: () => client,
-        creditsForPack: vi.fn().mockReturnValue(null),
-      });
-      const reconciliation = createBillingReconciliation(deps);
+      const partnerApiClient = { getActiveSubscription: vi.fn().mockResolvedValue(null) };
+      const reconciliation = createBillingReconciliation(makeDeps({ partnerApiClient, billingService }));
 
-      const result = await reconciliation.reconcileShop({ id: 'shop-a.myshopify.com' });
+      await reconciliation.reconcileShop({ shopDomain: 'shop-a.myshopify.com', plan: 'metered' });
 
-      expect(deps.billingService.grantCreditsForCharge).not.toHaveBeenCalled();
-      expect(result.granted).toBe(0);
+      expect(billingService.deactivateUnlimitedPlan).not.toHaveBeenCalled();
     });
 
-    it('does not increment granted when grantCreditsForCharge reports the charge was already claimed', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
-          data: {
-            currentAppInstallation: {
-              activeSubscriptions: [{ id: 'sub-1', name: 'AI UGC Generator Growth (Monthly)', status: 'ACTIVE', currentPeriodEnd: '2026-09-01' }],
-            },
-          },
-        }),
-      };
-      const deps = makeDeps({
-        getGraphqlClient: () => client,
-        billingService: { grantCreditsForCharge: vi.fn().mockResolvedValue({ granted: false }) },
-      });
-      const reconciliation = createBillingReconciliation(deps);
+    it('records the error and does not throw when the Partner API call fails', async () => {
+      const partnerApiClient = { getActiveSubscription: vi.fn().mockRejectedValue(new Error('boom')) };
+      const reconciliation = createBillingReconciliation(makeDeps({ partnerApiClient }));
 
-      const result = await reconciliation.reconcileShop({ id: 'shop-a.myshopify.com' });
+      const result = await reconciliation.reconcileShop({ shopDomain: 'shop-a.myshopify.com' });
 
-      expect(result.granted).toBe(0);
-    });
-
-    it('records an error and skips the shop when the GraphQL query itself rejects', async () => {
-      const client = { request: vi.fn().mockRejectedValue(new Error('network down')) };
-      const deps = makeDeps({ getGraphqlClient: () => client });
-      const reconciliation = createBillingReconciliation(deps);
-
-      const result = await reconciliation.reconcileShop({ id: 'shop-a.myshopify.com' });
-
-      expect(result).toEqual(expect.objectContaining({ shopDomain: 'shop-a.myshopify.com', granted: 0, skipped: true, error: expect.any(Error) }));
-      expect(deps.log).toHaveBeenCalled();
+      expect(result.skipped).toBe(true);
+      expect(result.error).toBeInstanceOf(Error);
     });
   });
 
   describe('runReconciliationSweep', () => {
-    it('walks every page of installed shops and reconciles each one', async () => {
+    it('walks every installed shop and continues past a per-shop failure', async () => {
       const shopsRepo = {
         listInstalledShops: vi
           .fn()
-          .mockResolvedValueOnce([{ id: 'a.myshopify.com', shopDomain: 'a.myshopify.com' }, { id: 'b.myshopify.com', shopDomain: 'b.myshopify.com' }])
+          .mockResolvedValueOnce([{ shopDomain: 'shop-a.myshopify.com' }, { shopDomain: 'shop-b.myshopify.com' }])
           .mockResolvedValueOnce([]),
       };
-      const client = { request: vi.fn().mockResolvedValue({ data: { currentAppInstallation: { activeSubscriptions: [] } } }) };
-      const deps = makeDeps({ shopsRepo, getGraphqlClient: () => client });
-      const reconciliation = createBillingReconciliation(deps);
-
-      const { results } = await reconciliation.runReconciliationSweep({ pageSize: 2 });
-
-      expect(results.map((r) => r.shopDomain)).toEqual(['a.myshopify.com', 'b.myshopify.com']);
-      // A full page (length === pageSize) can't be known to be the last page, so
-      // the loop always fetches one more page to confirm — here that's the empty
-      // second page, hence 2 calls rather than 1.
-      expect(shopsRepo.listInstalledShops).toHaveBeenCalledTimes(2);
-    });
-
-    it('a per-shop failure is captured in the results without aborting the sweep', async () => {
-      const shopsRepo = {
-        listInstalledShops: vi.fn().mockResolvedValueOnce([{ id: 'a.myshopify.com', shopDomain: 'a.myshopify.com' }]).mockResolvedValueOnce([]),
-      };
-      const deps = makeDeps({
-        shopsRepo,
-        getSessionForShop: vi.fn().mockRejectedValue(new Error('session lookup failed')),
-      });
-      const reconciliation = createBillingReconciliation(deps);
+      const getSessionForShop = vi
+        .fn()
+        .mockResolvedValueOnce(undefined) // shop-a: no session, skipped
+        .mockResolvedValueOnce({ id: 'session-b' }); // shop-b: proceeds
+      const partnerApiClient = { getActiveSubscription: vi.fn().mockResolvedValue(null) };
+      const reconciliation = createBillingReconciliation(makeDeps({ shopsRepo, getSessionForShop, partnerApiClient }));
 
       const { results } = await reconciliation.runReconciliationSweep();
 
-      expect(results).toHaveLength(1);
-      expect(results[0].error).toBeInstanceOf(Error);
+      expect(results).toHaveLength(2);
+      expect(results[0]).toEqual({ shopDomain: 'shop-a.myshopify.com', granted: 0, skipped: true, reason: 'no_session' });
+      expect(results[1].shopDomain).toBe('shop-b.myshopify.com');
     });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { AppProvider } from '@shopify/polaris';
 import { PricingTable } from '../../../src/components/billing/PricingTable.jsx';
 
@@ -12,47 +12,38 @@ const UNLIMITED_PLAN = { id: 'unlimited', label: 'Unlimited', monthlyPriceCents:
 function renderTable(props = {}) {
   return render(
     <AppProvider i18n={{}}>
-      <PricingTable
-        packs={PACKS}
-        unlimitedPlan={UNLIMITED_PLAN}
-        onSubscribe={() => {}}
-        onSubscribeUnlimited={() => {}}
-        pendingPackId={undefined}
-        isUnlimitedPending={false}
-        {...props}
-      />
+      <PricingTable packs={PACKS} unlimitedPlan={UNLIMITED_PLAN} onViewPlans={() => {}} {...props} />
     </AppProvider>,
   );
 }
 
 describe('PricingTable', () => {
-  it('shows no loading/disabled state on any button when nothing is pending', () => {
+  it('shows every pack and the Unlimited plan\'s pricing info, purely as read-only cards', () => {
     renderTable();
-    for (const name of ['Choose Starter', 'Choose Growth', 'Go Unlimited']) {
-      expect(screen.getByRole('button', { name })).not.toHaveAttribute('aria-disabled', 'true');
-    }
+    expect(screen.getByText('Starter')).toBeInTheDocument();
+    expect(screen.getByText('Growth')).toBeInTheDocument();
+    expect(screen.getByText('Unlimited')).toBeInTheDocument();
+    expect(screen.getByText('$19.00')).toBeInTheDocument();
+    // No per-pack "Choose X" buttons anymore — Shopify hosts the actual picker.
+    expect(screen.queryByRole('button', { name: /choose/i })).not.toBeInTheDocument();
   });
 
-  it('shows the spinner ONLY on the clicked pack\'s button, and disables the others — not every button going into a loading state for one click', () => {
-    renderTable({ pendingPackId: 'starter' });
+  it('calls onViewPlans when the single CTA is clicked', () => {
+    const onViewPlans = vi.fn();
+    renderTable({ onViewPlans });
 
-    const starterButton = screen.getByRole('button', { name: 'Choose Starter' });
-    const growthButton = screen.getByRole('button', { name: 'Choose Growth' });
-    const unlimitedButton = screen.getByRole('button', { name: 'Go Unlimited' });
+    fireEvent.click(screen.getByRole('button', { name: 'View plans & subscribe' }));
 
-    // Polaris renders a loading button's own accessible name as "Loading" with
-    // the label as visually-hidden text — the pressed one no longer exposes
-    // "Choose Starter" as its accessible name, which is itself proof only that
-    // one entered the loading state (getByRole above already fails otherwise).
-    expect(starterButton).toBeInTheDocument();
-    expect(growthButton).toHaveAttribute('aria-disabled', 'true');
-    expect(unlimitedButton).toHaveAttribute('aria-disabled', 'true');
+    expect(onViewPlans).toHaveBeenCalled();
   });
 
-  it('shows the spinner on Unlimited and disables the packs when isUnlimitedPending is true', () => {
-    renderTable({ isUnlimitedPending: true });
+  it('toggles displayed price/credits between monthly and annual', () => {
+    renderTable();
+    expect(screen.getByText('$19.00')).toBeInTheDocument();
 
-    expect(screen.getByRole('button', { name: 'Choose Starter' })).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByRole('button', { name: 'Choose Growth' })).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Annual' }));
+
+    expect(screen.getByText('$190.00')).toBeInTheDocument();
+    expect(screen.getByText('2400', { exact: false })).toBeInTheDocument();
   });
 });

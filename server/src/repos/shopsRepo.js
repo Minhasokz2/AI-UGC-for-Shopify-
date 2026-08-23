@@ -5,6 +5,11 @@ const SHOP_DEFAULTS = {
   plan: 'metered',
   googleVerified: false,
   verifiedEmail: null,
+  // Separate from googleVerified (which just gates the UI and can be reset by
+  // "sign out" so a merchant can re-verify with a different Google account):
+  // this one is permanent per shop, so trialCreditsService can never re-grant
+  // a second free trial just because googleVerified got reset.
+  trialEligibilityLocked: false,
   brandStyleProfile: null,
   referralCode: null,
   addOns: { imageOptimizer: false },

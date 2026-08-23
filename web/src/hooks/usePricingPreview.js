@@ -16,46 +16,21 @@ export function useBillingPacks() {
 }
 
 /**
- * Live "$X gets you Y credits" preview as the merchant types a custom
- * dollar amount. Call with the current amountCents; disabled until a
- * positive integer amount is present.
+ * Called once the merchant returns from Shopify's hosted pricing page with a
+ * `plan_handle` query param — see pages/Billing.jsx. Never trusts that param
+ * client-side; this just relays it so the server can verify it against the
+ * Partner API before granting anything.
  */
-export function useCustomPurchasePreview(amountCents) {
-  return useQuery({
-    queryKey: ['customPurchasePreview', amountCents],
-    queryFn: () => apiGet(`/api/billing/custom-purchase/preview?amountCents=${amountCents}`),
-    enabled: Number.isInteger(amountCents) && amountCents > 0,
-  });
-}
-
-export function useSubscribeToPack() {
+export function useConfirmAppPricingPlan() {
   return useMutation({
-    mutationFn: ({ packId, period }) => apiPost('/api/billing/subscribe', { packId, period }),
-  });
-}
-
-export function useSubscribeUnlimited() {
-  return useMutation({
-    mutationFn: () => apiPost('/api/billing/subscribe-unlimited'),
-  });
-}
-
-export function useCustomPurchase() {
-  return useMutation({
-    mutationFn: ({ amountCents }) => apiPost('/api/billing/custom-purchase', { amountCents }),
-  });
-}
-
-export function useConfirmCharge() {
-  return useMutation({
-    mutationFn: ({ chargeId }) => apiPost('/api/billing/confirm', { chargeId }),
+    mutationFn: ({ planHandle }) => apiPost('/api/billing/confirm-app-pricing-plan', { planHandle }),
   });
 }
 
 /**
- * Redirects the top-level browsing context to a Shopify-hosted billing
- * confirmation URL. Shopify billing confirmation pages must NOT load
- * inside the embedded iframe.
+ * Redirects the top-level browsing context to a Shopify-hosted page (the
+ * App Pricing plan picker). These pages must NOT load inside the embedded
+ * iframe.
  *
  * Verified against the installed @shopify/app-bridge-types@0.7.2 d.ts:
  * the v4 `ShopifyGlobal` returned by useAppBridge() has no `redirect`

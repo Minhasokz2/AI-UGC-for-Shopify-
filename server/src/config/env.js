@@ -54,14 +54,18 @@ const schema = z
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1),
     GOOGLE_OAUTH_REDIRECT_URI: z.string().url(),
 
-    // Billing: whether appSubscriptionCreate/appPurchaseOneTimeCreate ask Shopify
-    // for a TEST charge. Deliberately its OWN explicit flag, never inferred from
-    // NODE_ENV — this server is "production" hosting regardless of whether the
-    // shop currently testing against it is a real merchant or a Partner dev
-    // store, and Shopify hard-rejects a real (test:false) charge against a dev
-    // store. Defaults to true (never a real charge) until explicitly set to
-    // "false" once ready to accept real payments from real merchants.
-    BILLING_TEST_MODE: z.enum(['true', 'false']).default('true'),
+    // Shopify App Pricing (formerly "Managed Pricing") — required to confirm a
+    // subscription after the merchant returns from Shopify's hosted pricing
+    // page, and for billingReconciliation.js's renewal sweep. Once an app opts
+    // into Shopify App Pricing, Shopify blocks the classic Billing API
+    // (appSubscriptionCreate/appPurchaseOneTimeCreate) entirely, so subscription
+    // status must come from the Partner API instead of the Admin API. Optional
+    // here — if unset, confirming/reconciling fails clearly at call time (see
+    // services/partnerApiClient.js) rather than blocking boot. Create the token
+    // in Partner Dashboard > Settings > Partner API clients; the organization id
+    // is the numeric id in your Partner Dashboard's own URL.
+    SHOPIFY_PARTNER_API_TOKEN: z.string().optional(),
+    SHOPIFY_PARTNER_ORGANIZATION_ID: z.string().optional(),
 
     // Worker / runtime tuning
     JOB_WORKER_PER_SHOP_CONCURRENCY: z.coerce.number().default(20),

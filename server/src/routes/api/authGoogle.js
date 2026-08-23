@@ -11,9 +11,9 @@ const crypto = require('crypto');
 const { wrapAsync } = require('../../middleware/wrapAsync');
 
 /**
- * @param {{ googleAuthStatesRepo: object }} deps
+ * @param {{ googleAuthStatesRepo: object, shopsRepo: object }} deps
  */
-function createAuthGoogleRouter({ googleAuthStatesRepo }) {
+function createAuthGoogleRouter({ googleAuthStatesRepo, shopsRepo }) {
   const router = express.Router();
 
   router.post(
@@ -22,6 +22,17 @@ function createAuthGoogleRouter({ googleAuthStatesRepo }) {
       const state = crypto.randomBytes(24).toString('hex');
       await googleAuthStatesRepo.createState(state, { shopDomain: req.shopDomain });
       res.json({ popupUrl: `/api/auth/google/start?state=${state}` });
+    }),
+  );
+
+  // Resets ONLY the UI gate (googleVerified) so GoogleSignInGate re-prompts —
+  // never touches trialEligibilityLocked, so cycling through Google accounts
+  // can't be used to re-claim the free trial (see trialCreditsService).
+  router.post(
+    '/google-sign-out',
+    wrapAsync(async (req, res) => {
+      await shopsRepo.updateShop(req.shopDomain, { googleVerified: false, verifiedEmail: null });
+      res.status(204).end();
     }),
   );
 
