@@ -86,11 +86,13 @@ function buildDependencies({
 
   const credits = createCreditsService({ db, templatesRepo, allowedModelsRepo });
   const publishService = createPublishService({ jobsRepo, getGraphqlClient });
+  const referralsService = createReferralsService({ shopsRepo, referralsRepo });
   const billingService = createBillingService({
     shopsRepo,
     billingChargesRepo,
     getGraphqlClient,
     partnerApiClient,
+    referralsService,
     FieldValue,
   });
   const billingReconciliation = createBillingReconciliation({
@@ -101,7 +103,6 @@ function buildDependencies({
     getSessionForShop,
     log: (fields, message) => logger.error(fields, message),
   });
-  const referralsService = createReferralsService({ shopsRepo, referralsRepo });
   const trialCreditsService = createTrialCreditsService({ shopsRepo, usedTrialEmailsRepo, FieldValue });
   const imageOptimizerQuota = createImageOptimizerQuota({ imageOptimizerUsageRepo });
   const imageOptimizerService = createImageOptimizerService({ shopsRepo, conversionJobsRepo, imageOptimizerQuota });
@@ -110,9 +111,9 @@ function buildDependencies({
     emailService,
     log: (fields, message) => logger.error(fields, message),
   });
-  const webhookHandlers = createWebhookHandlers({ shopsRepo, productsRepo, billingService, sessionStorage: shopify.config.sessionStorage });
+  const webhookHandlers = createWebhookHandlers({ shopsRepo, productsRepo, sessionStorage: shopify.config.sessionStorage });
 
-  const jobWorker = createJobWorker({ jobsRepo, templatesRepo, allowedModelsRepo, credits, workerId, logger });
+  const jobWorker = createJobWorker({ jobsRepo, templatesRepo, allowedModelsRepo, credits, batchesRepo, workerId, logger });
   const imageOptimizerWorker = createImageOptimizerWorker({ conversionJobsRepo, imageOptimizerService, workerId, logger });
 
   return {

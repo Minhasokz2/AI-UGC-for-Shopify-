@@ -108,12 +108,18 @@ async function runGenerationJob(job, { workerId, jobsRepo, templatesRepo, allowe
 
   const model = await resolveModelForJob(job, { templatesRepo, allowedModelsRepo });
 
+  // Custom Prompt Studio attaches images via job.imageUrls (plural) rather
+  // than job.sourceImageUrl — every single-image-consuming step below
+  // (background removal, single-image dispatch) needs to fall back to the
+  // first attached image, or those jobs run with no image at all.
+  const primarySourceImageUrl = job.sourceImageUrl ?? job.imageUrls?.[0];
+
   let processedImageUrl = job.processedImageUrl;
   if (job.reuseProcessedImageFrom) {
     const sourceJob = await jobsRepo.getById(job.reuseProcessedImageFrom);
     processedImageUrl = sourceJob?.processedImageUrl;
   } else if (needsBackgroundRemoval(job, model)) {
-    const removed = await backgroundRemoval.removeBackground({ imageUrl: job.sourceImageUrl });
+    const removed = await backgroundRemoval.removeBackground({ imageUrl: primarySourceImageUrl });
     processedImageUrl = removed.url;
     await jobsRepo.heartbeat(job.id, {
       workerId,
@@ -122,7 +128,7 @@ async function runGenerationJob(job, { workerId, jobsRepo, templatesRepo, allowe
     });
   }
 
-  const imageUrl = processedImageUrl ?? job.sourceImageUrl;
+  const imageUrl = processedImageUrl ?? primarySourceImageUrl;
   const numImages = job.numImages ?? 1;
   const genParams = {
     imageUrl,

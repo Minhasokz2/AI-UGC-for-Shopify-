@@ -77,6 +77,27 @@ describe('integration: misc authenticated routes', () => {
     expect(second.body.referrals).toEqual([]);
   });
 
+  it('POST /api/referrals/apply attributes the requesting shop to the code\'s owner', async () => {
+    const { app, db } = buildTestApp();
+    await seedShop(db);
+    await db.collection('shops').doc('referrer-shop.myshopify.com').set({ shopDomain: 'referrer-shop.myshopify.com', referralCode: 'ABCDEFGH' });
+
+    const res = await request(app).post('/api/referrals/apply').send({ code: 'ABCDEFGH' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ applied: true, referral: expect.objectContaining({ referrerShopDomain: 'referrer-shop.myshopify.com', referredShopDomain: SHOP }) });
+  });
+
+  it('POST /api/referrals/apply returns { applied: false, reason: "unknown_code" } for a code that matches no shop', async () => {
+    const { app, db } = buildTestApp();
+    await seedShop(db);
+
+    const res = await request(app).post('/api/referrals/apply').send({ code: 'NOPE0000' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ applied: false, reason: 'unknown_code' });
+  });
+
   it('POST /api/image-optimizer requires an Idempotency-Key header (400 without one)', async () => {
     const { app, db } = buildTestApp();
     await seedShop(db);

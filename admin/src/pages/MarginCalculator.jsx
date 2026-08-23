@@ -17,7 +17,12 @@ function MarginCalculator() {
   const [selectedModelId, setSelectedModelId] = useState('');
   const [actualCostUsd, setActualCostUsd] = useState('0.05');
   const [creditCost, setCreditCost] = useState('1');
-  const [period, setPeriod] = useState('monthly');
+  // Defaults to 'annual', not 'monthly' — Scale billed annually is the true
+  // worst-case revenue-per-credit rate across the whole catalog (see
+  // server/src/services/billingPacks.js), so defaulting to monthly would show
+  // an admin an optimistically-better-than-reality margin unless they
+  // remembered to switch the toggle themselves.
+  const [period, setPeriod] = useState('annual');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 

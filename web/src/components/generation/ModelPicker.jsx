@@ -6,14 +6,21 @@ import { ErrorState } from '../feedback/ErrorState.jsx';
 /**
  * Renders first and is the ONLY enabled control until a model is chosen —
  * callers must not mount the image-attach UI before selectedModel exists.
+ *
+ * `excludeCategories` filters client-side after the fetch — `eligibleFlow`
+ * alone isn't a sufficient filter for e.g. Custom Prompt Studio, since
+ * background-removal, video, and try-on models all also list 'custom' among
+ * their eligibleFlows despite needing a different UI/flow than this generic
+ * prompt+image picker offers.
+ * @param {{ category?: string, eligibleFlow?: string, excludeCategories?: string[], selectedModelId?: string, onSelect: (model: object) => void }} props
  */
-export function ModelPicker({ category, eligibleFlow, selectedModelId, onSelect }) {
+export function ModelPicker({ category, eligibleFlow, excludeCategories, selectedModelId, onSelect }) {
   const { data, isLoading, isError, error } = useModels({ category, eligibleFlow });
 
   if (isLoading) return <LoadingState label="Loading models…" />;
   if (isError) return <ErrorState error={error} title="Couldn't load models" />;
 
-  const models = data?.models ?? [];
+  const models = (data?.models ?? []).filter((model) => !excludeCategories?.includes(model.category));
 
   return (
     <BlockStack gap="300">

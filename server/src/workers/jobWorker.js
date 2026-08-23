@@ -23,13 +23,14 @@ const { LostLeaseError } = require('../errors/AppError');
 const { JOB_WORKER_PER_SHOP_CONCURRENCY, JOB_WORKER_GLOBAL_CONCURRENCY } = require('../config/constants');
 
 /**
- * @param {{ jobsRepo: object, templatesRepo: object, allowedModelsRepo: object, credits: object, workerId: string, logger?: object, captureException?: Function, globalConcurrency?: number, perShopConcurrency?: number }} deps
+ * @param {{ jobsRepo: object, templatesRepo: object, allowedModelsRepo: object, credits: object, batchesRepo?: object, workerId: string, logger?: object, captureException?: Function, globalConcurrency?: number, perShopConcurrency?: number }} deps
  */
 function createJobWorker({
   jobsRepo,
   templatesRepo,
   allowedModelsRepo,
   credits,
+  batchesRepo,
   workerId,
   logger = require('../config/logger').logger,
   captureException = require('../config/sentry').Sentry.captureException,
@@ -62,6 +63,7 @@ function createJobWorker({
     try {
       const resultVariations = await generationPipeline.runGenerationJob(claim.job, { workerId, jobsRepo, templatesRepo, allowedModelsRepo });
       await jobsRepo.settleJobSuccess(job.id, { workerId, resultVariations, recomputeCost: credits.recomputeCost });
+      await reportBatchProgress(claim.job, true);
       return { jobId: job.id, outcome: 'succeeded' };
     } catch (err) {
       if (err instanceof LostLeaseError) {
@@ -80,8 +82,20 @@ function createJobWorker({
       if (settled.skipped) {
         return { jobId: job.id, outcome: 'skipped', reason: 'lost_lease' };
       }
+      await reportBatchProgress(claim.job, false);
       return { jobId: job.id, outcome: 'failed' };
     }
+  }
+
+  /**
+   * Records this job's outcome against its batch (Bulk Generation), if it
+   * belongs to one — previously nothing ever called incrementBatchProgress,
+   * so a batch's succeededCount/failedCount/status sat frozen at their
+   * initial values forever and the frontend's progress bar never moved.
+   */
+  async function reportBatchProgress(job, succeeded) {
+    if (!batchesRepo || !job.batchId) return;
+    await batchesRepo.incrementBatchProgress(job.batchId, { succeeded });
   }
 
   /** Queues a job for processing, respecting both concurrency caps. */

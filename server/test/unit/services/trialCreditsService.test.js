@@ -83,6 +83,25 @@ describe('services/trialCreditsService', () => {
       });
     });
 
+    it('resumes and grants credits when the shop\'s OWN prior claim is found (crash between claiming the email and locking the shop) — never permanently forfeits the trial', async () => {
+      const shopsRepo = makeShopsRepo();
+      const usedTrialEmailsRepo = makeUsedTrialEmailsRepo({
+        // Same shop shows up as the "existing" claimant of its own earlier attempt.
+        claimTrialForEmail: vi.fn().mockResolvedValue({ claimed: false, existingShopDomain: 'shop-a.myshopify.com' }),
+      });
+      const service = createTrialCreditsService({ shopsRepo, usedTrialEmailsRepo, FieldValue });
+
+      const result = await service.grantTrialIfEligible({ shopDomain: 'shop-a.myshopify.com', email: 'merchant@example.com' });
+
+      expect(result).toEqual({ granted: true, credits: FREE_TRIAL_CREDITS });
+      expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a.myshopify.com', {
+        googleVerified: true,
+        verifiedEmail: 'merchant@example.com',
+        trialEligibilityLocked: true,
+        creditBalance: expect.anything(),
+      });
+    });
+
     it('normalizes the email before claiming, so gmail dot/tag variants collide correctly', async () => {
       const shopsRepo = makeShopsRepo();
       const usedTrialEmailsRepo = makeUsedTrialEmailsRepo();

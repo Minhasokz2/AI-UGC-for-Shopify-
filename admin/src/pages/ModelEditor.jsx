@@ -63,7 +63,9 @@ function ModelEditor() {
   const [creditCost, setCreditCost] = useState('1'); // shared editable field (both modes)
   const [needsPriceReview, setNeedsPriceReview] = useState(false); // shared editable field (both modes)
   const [packs, setPacks] = useState([]);
-  const [period, setPeriod] = useState('monthly');
+  // Defaults to 'annual' — see MarginCalculator.jsx's identical comment: Scale
+  // billed annually is the true catalog-wide worst case, not monthly.
+  const [period, setPeriod] = useState('annual');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');

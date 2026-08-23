@@ -9,6 +9,12 @@ import { isSelectionValid } from '../lib/isSelectionValid.js';
 import { useCreateJob } from '../hooks/useJobs.js';
 import { useAppBridgeToast } from '../hooks/useAppBridgeToast.js';
 
+// background_removal has no standalone prompt-driven UI of its own here;
+// video and try_on each have their own dedicated flow (Video Studio, Virtual
+// Try-On) with UI these models actually need (a tier picker, a person+garment
+// image pair) that this generic prompt+image picker doesn't collect.
+const STUDIO_EXCLUDED_CATEGORIES = ['background_removal', 'video', 'try_on'];
+
 /**
  * Custom Prompt Studio. ModelPicker renders first and is the ONLY enabled
  * control until a model is chosen — the image-attach UI isn't even
@@ -53,7 +59,12 @@ export function Studio() {
     <PageSkeleton title="Custom Prompt Studio">
       <BlockStack gap="400">
         <Card>
-          <ModelPicker selectedModelId={selectedModel?.id} onSelect={handleSelectModel} />
+          <ModelPicker
+            eligibleFlow="custom"
+            excludeCategories={STUDIO_EXCLUDED_CATEGORIES}
+            selectedModelId={selectedModel?.id}
+            onSelect={handleSelectModel}
+          />
         </Card>
 
         {selectedModel && (

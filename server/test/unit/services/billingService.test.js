@@ -16,6 +16,7 @@ function makeDeps(overrides = {}) {
     billingChargesRepo: { claimCharge: vi.fn().mockResolvedValue({ claimed: true }) },
     getGraphqlClient: () => makeGraphqlClient(),
     partnerApiClient: { getActiveSubscription: vi.fn().mockResolvedValue(null) },
+    referralsService: { recordReferredPayment: vi.fn().mockResolvedValue({ credited: false }) },
     FieldValue,
     ...overrides,
   };

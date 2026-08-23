@@ -25,7 +25,7 @@
 // decides which credit amount to grant.
 
 const { resolvePlanFromHandle } = require('../config/appPricingPlans');
-const { CREDIT_PACKS } = require('./billingPacks');
+const { CREDIT_PACKS, UNLIMITED_PLAN } = require('./billingPacks');
 
 const APP_AND_SHOP_ID_QUERY = `#graphql
   query AppAndShopId {
@@ -70,6 +70,7 @@ function createBillingReconciliation({ shopsRepo, billingService, getGraphqlClie
       return { shopDomain, granted: 0, skipped: false };
     }
 
+    const isAnnual = subscription.billingPeriod === 'ANNUAL';
     let granted = 0;
     for (const item of subscription.items ?? []) {
       const resolved = resolvePlanFromHandle(item.handle);
@@ -79,13 +80,17 @@ function createBillingReconciliation({ shopsRepo, billingService, getGraphqlClie
       if (resolved.unlimited) {
         // eslint-disable-next-line no-await-in-loop
         await billingService.activateUnlimitedPlan(shopDomain, item.handle, subscription.billingPeriod);
+        const amountCents = isAnnual ? UNLIMITED_PLAN.annualPriceCents : UNLIMITED_PLAN.monthlyPriceCents;
+        // eslint-disable-next-line no-await-in-loop
+        await billingService.recordUnlimitedRevenueOnce(shopDomain, { chargeKey, amountCents });
         continue;
       }
 
       const pack = CREDIT_PACKS.find((p) => p.id === resolved.packId);
-      const credits = subscription.billingPeriod === 'ANNUAL' ? pack.annualCredits : pack.monthlyCredits;
+      const credits = isAnnual ? pack.annualCredits : pack.monthlyCredits;
+      const amountCents = isAnnual ? pack.annualPriceCents : pack.monthlyPriceCents;
       // eslint-disable-next-line no-await-in-loop
-      const result = await billingService.grantCreditsForCharge(shopDomain, { chargeKey, credits, type: 'renewal' });
+      const result = await billingService.grantCreditsForCharge(shopDomain, { chargeKey, credits, type: 'renewal', amountCents });
       if (result.granted) granted += 1;
     }
 

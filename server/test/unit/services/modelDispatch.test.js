@@ -19,6 +19,15 @@ describe('services/modelDispatch', () => {
       expect(url).toBe('https://cdn/scene.png');
     });
 
+    it('forwards imageUrls (plural) through to fal.generateOne for a multi-image ugc model', async () => {
+      const spy = vi.spyOn(fal, 'generateOne').mockResolvedValue({ url: 'https://cdn/ugc.png' });
+      const model = { id: 'm1b', category: 'ugc', endpoint: 'fal-ai/x', imageParam: 'image_urls', inputShape: 'image_urls_prompt' };
+
+      await generateSingle(model, { imageUrls: ['https://in/a.png', 'https://in/b.png'], prompt: 'p' });
+
+      expect(spy).toHaveBeenCalledWith({ model, imageUrls: ['https://in/a.png', 'https://in/b.png'], prompt: 'p' });
+    });
+
     it('dispatches text_to_image to textToImageModels.generateTextToImage with numImages:1 and unwraps the single result', async () => {
       const spy = vi
         .spyOn(textToImageModels, 'generateTextToImage')

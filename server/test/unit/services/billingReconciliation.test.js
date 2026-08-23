@@ -1,5 +1,5 @@
 const { createBillingReconciliation } = require('../../../src/services/billingReconciliation');
-const { CREDIT_PACKS } = require('../../../src/services/billingPacks');
+const { CREDIT_PACKS, UNLIMITED_PLAN } = require('../../../src/services/billingPacks');
 const { PLAN_HANDLES } = require('../../../src/config/appPricingPlans');
 
 const APP_GID = 'gid://shopify/App/1';
@@ -52,6 +52,7 @@ describe('services/billingReconciliation', () => {
           grantCreditsForCharge: vi.fn().mockResolvedValue({ granted: true }),
           activateUnlimitedPlan: vi.fn(),
           deactivateUnlimitedPlan: vi.fn(),
+          recordUnlimitedRevenueOnce: vi.fn().mockResolvedValue({ granted: true }),
         };
         const reconciliation = createBillingReconciliation(makeDeps({ partnerApiClient, billingService }));
 
@@ -61,6 +62,7 @@ describe('services/billingReconciliation', () => {
           chargeKey: `app-pricing:${growthHandle}:2026-02-01T00:00:00Z`,
           credits: growth.monthlyCredits,
           type: 'renewal',
+          amountCents: growth.monthlyPriceCents,
         });
         expect(result).toEqual({ shopDomain: 'shop-a.myshopify.com', granted: 1, skipped: false });
       } finally {
@@ -85,6 +87,7 @@ describe('services/billingReconciliation', () => {
           grantCreditsForCharge: vi.fn().mockResolvedValue({ granted: true }),
           activateUnlimitedPlan: vi.fn(),
           deactivateUnlimitedPlan: vi.fn(),
+          recordUnlimitedRevenueOnce: vi.fn().mockResolvedValue({ granted: true }),
         };
         const reconciliation = createBillingReconciliation(makeDeps({ partnerApiClient, billingService }));
 
@@ -94,6 +97,7 @@ describe('services/billingReconciliation', () => {
           chargeKey: `app-pricing:${growthHandle}:2026-02-01T00:00:00Z`,
           credits: growth.annualCredits,
           type: 'renewal',
+          amountCents: growth.annualPriceCents,
         });
       } finally {
         PLAN_HANDLES.growth = original;
@@ -116,6 +120,7 @@ describe('services/billingReconciliation', () => {
           grantCreditsForCharge: vi.fn(),
           activateUnlimitedPlan: vi.fn().mockResolvedValue(undefined),
           deactivateUnlimitedPlan: vi.fn(),
+          recordUnlimitedRevenueOnce: vi.fn().mockResolvedValue({ granted: true }),
         };
         const reconciliation = createBillingReconciliation(makeDeps({ partnerApiClient, billingService }));
 
@@ -123,6 +128,10 @@ describe('services/billingReconciliation', () => {
 
         expect(billingService.activateUnlimitedPlan).toHaveBeenCalledWith('shop-a.myshopify.com', unlimitedHandle, 'EVERY_30_DAYS');
         expect(billingService.grantCreditsForCharge).not.toHaveBeenCalled();
+        expect(billingService.recordUnlimitedRevenueOnce).toHaveBeenCalledWith('shop-a.myshopify.com', {
+          chargeKey: `app-pricing:${unlimitedHandle}:2026-02-01T00:00:00Z`,
+          amountCents: UNLIMITED_PLAN.monthlyPriceCents,
+        });
         expect(result.granted).toBe(0);
       } finally {
         PLAN_HANDLES.unlimited = original;

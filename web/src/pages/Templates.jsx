@@ -3,6 +3,7 @@ import { BlockStack, InlineGrid, Card, Text, Button, Modal, TextField, ButtonGro
 import { useNavigate } from 'react-router-dom';
 import { PageSkeleton } from '../components/layout/PageSkeleton.jsx';
 import { ProductPicker } from '../components/generation/ProductPicker.jsx';
+import { AgeConfirmationCheckbox } from '../components/generation/AgeConfirmationCheckbox.jsx';
 import { LoadingState } from '../components/feedback/LoadingState.jsx';
 import { ErrorState } from '../components/feedback/ErrorState.jsx';
 import { EmptyState } from '../components/feedback/EmptyState.jsx';
@@ -19,6 +20,7 @@ export function Templates() {
   const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [numImages, setNumImages] = useState('1');
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
   const { data, isLoading, isError, error } = useTemplates({ category });
   const createJob = useCreateJob();
   const { showApiError, showSuccess } = useAppBridgeToast();
@@ -31,7 +33,10 @@ export function Templates() {
     setSelectedProductIds([]);
     setSelectedProducts([]);
     setNumImages('1');
+    setAgeConfirmed(false);
   }
+
+  const isUgcTemplate = activeTemplate?.category === 'ugc';
 
   async function handleGenerate() {
     const product = selectedProducts[0];
@@ -43,6 +48,9 @@ export function Templates() {
         templateId: activeTemplate.id,
         sourceImageUrl,
         numImages: Number(numImages) || 1,
+        // The UGC template always 422'd without this — personaGuard requires
+        // it for any contentType:'ugc' job, and this modal never collected it.
+        ...(isUgcTemplate ? { personaAttributes: { ageRange: 'adult' } } : {}),
       });
       rememberSourceImageProduct(sourceImageUrl, product.shopifyProductId);
       showSuccess('Job created — track it in Job History.');
@@ -100,7 +108,7 @@ export function Templates() {
           primaryAction={{
             content: 'Generate',
             onAction: handleGenerate,
-            disabled: selectedProducts.length === 0,
+            disabled: selectedProducts.length === 0 || (isUgcTemplate && !ageConfirmed),
             loading: createJob.isPending,
           }}
           secondaryActions={[{ content: 'Cancel', onAction: () => setActiveTemplate(null) }]}
@@ -123,6 +131,7 @@ export function Templates() {
                 max={10}
                 autoComplete="off"
               />
+              {isUgcTemplate && <AgeConfirmationCheckbox checked={ageConfirmed} onChange={setAgeConfirmed} />}
             </BlockStack>
           </Modal.Section>
         </Modal>

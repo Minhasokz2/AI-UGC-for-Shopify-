@@ -25,7 +25,7 @@ export function Video() {
   const navigate = useNavigate();
 
   const models = modelsData?.models ?? [];
-  const tierModel = models.find((m) => m.modelRole === ROLE_BY_TIER[tier] || m.id === ROLE_BY_TIER[tier]);
+  const tierModel = models.find((m) => m.role === ROLE_BY_TIER[tier]);
 
   const canGenerate = images.length === 1 && prompt.trim().length > 0;
 

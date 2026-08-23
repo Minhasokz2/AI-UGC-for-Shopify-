@@ -80,8 +80,8 @@ function getShopify(overrides = {}) {
         // Lazy require: shopsRepo depends on config/firebase (already loaded) but
         // this avoids config/shopify.js having a hard load-order dependency on the
         // repos layer for a callback that only ever runs at request time.
-        const { getOrCreateShop } = require('../repos/shopsRepo');
-        await getOrCreateShop(session.shop);
+        const { getShopsRepo } = require('../repos/shopsRepo');
+        await getShopsRepo().getOrCreateShop(session.shop);
         logger.info({ shop: session.shop }, 'Registered webhooks and ensured shop doc after auth');
       },
     },

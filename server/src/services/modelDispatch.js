@@ -47,7 +47,7 @@ async function generateSingle(model, params = {}) {
   const { imageUrl, imageUrls, personImageUrl, garmentImageUrl, prompt, angles } = params;
 
   if (SCENE_CATEGORIES.has(model.category)) {
-    const result = await fal.generateOne({ model, imageUrl, prompt });
+    const result = await fal.generateOne({ model, imageUrl, imageUrls, prompt });
     return result.url;
   }
   if (model.category === 'text_to_image') {
@@ -83,10 +83,10 @@ async function generateNativeBatch(model, params = {}) {
   if (!model.supportsBatch) {
     throw new Error(`modelDispatch.js: model "${model.id}" does not support native batch generation`);
   }
-  const { imageUrl, prompt, numImages } = params;
+  const { imageUrl, imageUrls, prompt, numImages } = params;
 
   if (SCENE_CATEGORIES.has(model.category)) {
-    const results = await fal.generateBatch({ model, imageUrl, prompt, numImages });
+    const results = await fal.generateBatch({ model, imageUrl, imageUrls, prompt, numImages });
     return results.map((r) => r.url);
   }
   if (model.category === 'text_to_image') {

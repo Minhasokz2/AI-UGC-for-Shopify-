@@ -42,7 +42,17 @@ function createTrialCreditsService({ shopsRepo, usedTrialEmailsRepo, FieldValue 
 
     const normalizedEmail = normalizeEmail(email);
     const claim = await usedTrialEmailsRepo.claimTrialForEmail(normalizedEmail, { shopDomain });
-    if (!claim.claimed) {
+
+    // claimTrialForEmail and this function's own shop-doc grant below are two
+    // SEPARATE writes, not one transaction — if the process crashes in
+    // between, this shop's own earlier claim is already recorded but
+    // trialEligibilityLocked never got set, so a retry lands right back here
+    // with claim.claimed:false. Recognize that as "resuming my own claim",
+    // not "someone else already used this email" (which would otherwise
+    // permanently lock the shop out of credits it never received).
+    const isOwnPriorClaim = !claim.claimed && claim.existingShopDomain === shopDomain;
+
+    if (!claim.claimed && !isOwnPriorClaim) {
       // The Google identity was already spent on a trial elsewhere — the sign-in
       // itself still counts (unlocks the app for this shop), but no free credits.
       await shopsRepo.updateShop(shopDomain, { googleVerified: true, verifiedEmail: email, trialEligibilityLocked: true });

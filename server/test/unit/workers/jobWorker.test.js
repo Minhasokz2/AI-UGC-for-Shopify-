@@ -89,6 +89,45 @@ describe('workers/jobWorker', () => {
 
       expect(result).toEqual({ jobId: 'job-1', outcome: 'skipped', reason: 'lost_lease' });
     });
+
+    it('reports a succeeded batch job\'s progress — regression for incrementBatchProgress never being called in production', async () => {
+      const batchesRepo = { incrementBatchProgress: vi.fn().mockResolvedValue(undefined) };
+      const deps = makeDeps({
+        batchesRepo,
+        jobsRepo: { ...makeDeps().jobsRepo, claimForProcessing: vi.fn().mockResolvedValue({ claimed: true, job: { id: 'job-1', shopDomain: 'shop-a', batchId: 'batch-1' } }) },
+      });
+      vi.spyOn(generationPipeline, 'runGenerationJob').mockResolvedValue([{ url: 'https://cdn/a.png' }]);
+      const worker = createJobWorker(deps);
+
+      await worker.processJob({ id: 'job-1', shopDomain: 'shop-a', batchId: 'batch-1' });
+
+      expect(batchesRepo.incrementBatchProgress).toHaveBeenCalledWith('batch-1', { succeeded: true });
+    });
+
+    it('reports a failed batch job\'s progress too', async () => {
+      const batchesRepo = { incrementBatchProgress: vi.fn().mockResolvedValue(undefined) };
+      const deps = makeDeps({
+        batchesRepo,
+        jobsRepo: { ...makeDeps().jobsRepo, claimForProcessing: vi.fn().mockResolvedValue({ claimed: true, job: { id: 'job-1', shopDomain: 'shop-a', batchId: 'batch-1' } }) },
+      });
+      vi.spyOn(generationPipeline, 'runGenerationJob').mockRejectedValue(new Error('boom'));
+      const worker = createJobWorker(deps);
+
+      await worker.processJob({ id: 'job-1', shopDomain: 'shop-a', batchId: 'batch-1' });
+
+      expect(batchesRepo.incrementBatchProgress).toHaveBeenCalledWith('batch-1', { succeeded: false });
+    });
+
+    it('never touches batchesRepo for a non-batch job, even when batchesRepo is provided', async () => {
+      const batchesRepo = { incrementBatchProgress: vi.fn() };
+      const deps = makeDeps({ batchesRepo });
+      vi.spyOn(generationPipeline, 'runGenerationJob').mockResolvedValue([]);
+      const worker = createJobWorker(deps);
+
+      await worker.processJob({ id: 'job-1', shopDomain: 'shop-a' });
+
+      expect(batchesRepo.incrementBatchProgress).not.toHaveBeenCalled();
+    });
   });
 
   describe('enqueue concurrency limiting', () => {

@@ -1,14 +1,23 @@
-import { BlockStack, Card, Text, Button, ResourceList, ResourceItem, Badge, InlineStack } from '@shopify/polaris';
+import { useState } from 'react';
+import { BlockStack, Card, Text, Button, TextField, ResourceList, ResourceItem, Badge, InlineStack } from '@shopify/polaris';
 import { PageSkeleton } from '../components/layout/PageSkeleton.jsx';
 import { LoadingState } from '../components/feedback/LoadingState.jsx';
 import { ErrorState } from '../components/feedback/ErrorState.jsx';
 import { EmptyState } from '../components/feedback/EmptyState.jsx';
-import { useReferral } from '../hooks/useReferral.js';
+import { useReferral, useApplyReferralCode } from '../hooks/useReferral.js';
 import { useAppBridgeToast } from '../hooks/useAppBridgeToast.js';
+
+const APPLY_RESULT_MESSAGES = {
+  unknown_code: "That code doesn't match any shop.",
+  self_referral: "You can't refer yourself.",
+  already_referred: 'This shop already has a referral on file.',
+};
 
 export function Referrals() {
   const { data, isLoading, isError, error } = useReferral();
-  const { showSuccess } = useAppBridgeToast();
+  const applyCode = useApplyReferralCode();
+  const [enteredCode, setEnteredCode] = useState('');
+  const { showSuccess, showError, showApiError } = useAppBridgeToast();
 
   if (isLoading) return <PageSkeleton title="Referrals"><LoadingState label="Loading referrals…" /></PageSkeleton>;
   if (isError) return <PageSkeleton title="Referrals"><ErrorState error={error} title="Couldn't load referrals" /></PageSkeleton>;
@@ -18,6 +27,20 @@ export function Referrals() {
   async function copyCode() {
     await navigator.clipboard.writeText(code);
     showSuccess('Referral code copied.');
+  }
+
+  async function handleApplyCode() {
+    try {
+      const result = await applyCode.mutateAsync(enteredCode.trim());
+      if (result.applied) {
+        showSuccess('Referral code applied.');
+        setEnteredCode('');
+      } else {
+        showError(APPLY_RESULT_MESSAGES[result.reason] ?? "Couldn't apply that code.");
+      }
+    } catch (err) {
+      showApiError(err);
+    }
   }
 
   return (
@@ -39,6 +62,29 @@ export function Referrals() {
               billing platform doesn't support automatic payouts to third-party merchants, so
               there's no automatic payout button.
             </Text>
+          </BlockStack>
+        </Card>
+
+        <Card>
+          <BlockStack gap="200">
+            <Text as="h3" variant="headingSm">
+              Have a referral code?
+            </Text>
+            <InlineStack gap="200" blockAlign="end">
+              <div style={{ flexGrow: 1 }}>
+                <TextField
+                  label="Referral code"
+                  labelHidden
+                  value={enteredCode}
+                  onChange={setEnteredCode}
+                  autoComplete="off"
+                  placeholder="Enter a code"
+                />
+              </div>
+              <Button onClick={handleApplyCode} loading={applyCode.isPending} disabled={!enteredCode.trim()}>
+                Apply
+              </Button>
+            </InlineStack>
           </BlockStack>
         </Card>
 

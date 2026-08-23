@@ -147,6 +147,48 @@ describe('services/generationPipeline', () => {
       );
     });
 
+    it('falls back to the first of job.imageUrls when sourceImageUrl is absent — regression for Custom Prompt Studio jobs, which attach images this way', async () => {
+      const deps = makeDeps();
+      const model = { id: 'custom-model', category: 'upscale', supportsBatch: false, endpoint: 'x', imageParam: 'image_url' };
+      deps.allowedModelsRepo.getModel.mockResolvedValue(model);
+      const removeBgSpy = vi.spyOn(backgroundRemoval, 'removeBackground');
+      const dispatchSpy = vi.spyOn(modelDispatch, 'generateSingle').mockResolvedValue('https://cdn/out.png');
+
+      await runGenerationJob(
+        { id: 'job-1', contentType: 'custom', modelId: 'custom-model', imageUrls: ['https://cdn/attached.png'], prompt: 'p', numImages: 1 },
+        deps,
+      );
+
+      expect(removeBgSpy).not.toHaveBeenCalled();
+      expect(dispatchSpy).toHaveBeenCalledWith(model, expect.objectContaining({ imageUrl: 'https://cdn/attached.png' }));
+    });
+
+    it('background-removes the first of job.imageUrls when sourceImageUrl is absent, for a scene/ugc/color_safe custom model', async () => {
+      const deps = makeDeps();
+      const model = { id: 'ugc-model', category: 'ugc' };
+      deps.allowedModelsRepo.getModel.mockResolvedValue(model);
+      vi.spyOn(backgroundRemoval, 'removeBackground').mockResolvedValue({ url: 'https://cdn/clean.png' });
+      const dispatchSpy = vi.spyOn(modelDispatch, 'generateSingle').mockResolvedValue('https://cdn/out.png');
+
+      await runGenerationJob(
+        {
+          id: 'job-1',
+          contentType: 'custom',
+          modelId: 'ugc-model',
+          imageUrls: ['https://cdn/attached.png', 'https://cdn/second.png'],
+          prompt: 'p',
+          numImages: 1,
+        },
+        deps,
+      );
+
+      expect(backgroundRemoval.removeBackground).toHaveBeenCalledWith({ imageUrl: 'https://cdn/attached.png' });
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        model,
+        expect.objectContaining({ imageUrl: 'https://cdn/clean.png', imageUrls: ['https://cdn/attached.png', 'https://cdn/second.png'] }),
+      );
+    });
+
     it('runs background removal first for a scene job, heartbeats the result, then generates from the clean image', async () => {
       const deps = makeDeps();
       deps.templatesRepo.getTemplate.mockResolvedValue({ category: 'scene', modelRole: 'default_scene' });

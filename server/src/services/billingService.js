@@ -33,6 +33,13 @@
 // there's no separate annual handle. Which period a merchant actually chose
 // comes from activeSubscription.billingPeriod ('ANNUAL' | 'EVERY_30_DAYS'),
 // never from the handle.
+//
+// Referral commission (referralsService.recordReferredPayment) rides the
+// SAME idempotent chargeKey claim as the credit grant itself, rather than an
+// ad-hoc call at each caller — recordUnlimitedRevenueOnce exists purely to
+// give the Unlimited plan (which has no credits to claim against) that same
+// exactly-once-per-billing-cycle guarantee, so a page revisit or a
+// reconciliation re-run can never double-count commission.
 
 const { CREDIT_PACKS, UNLIMITED_PLAN } = require('./billingPacks');
 const { resolvePlanFromHandle } = require('../config/appPricingPlans');
@@ -52,9 +59,9 @@ function getPricingPlansUrl(shopDomain) {
 }
 
 /**
- * @param {{ shopsRepo: object, billingChargesRepo: object, getGraphqlClient: Function, partnerApiClient: object, FieldValue: object }} deps
+ * @param {{ shopsRepo: object, billingChargesRepo: object, getGraphqlClient: Function, partnerApiClient: object, referralsService: object, FieldValue: object }} deps
  */
-function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient, partnerApiClient, FieldValue }) {
+function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient, partnerApiClient, referralsService, FieldValue }) {
   async function getAppAndShopIds(session) {
     const client = getGraphqlClient(session);
     const response = await client.request(APP_AND_SHOP_ID_QUERY);
@@ -78,15 +85,19 @@ function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient,
     }
 
     const chargeKey = `app-pricing:${planHandle}:${subscription.currentBillingCycle.startTime}`;
+    const isAnnual = subscription.billingPeriod === 'ANNUAL';
 
     if (resolved.unlimited) {
       await activateUnlimitedPlan(shopDomain, planHandle, subscription.billingPeriod);
+      const amountCents = isAnnual ? UNLIMITED_PLAN.annualPriceCents : UNLIMITED_PLAN.monthlyPriceCents;
+      await recordUnlimitedRevenueOnce(shopDomain, { chargeKey, amountCents });
       return { confirmed: true, plan: 'unlimited' };
     }
 
     const pack = CREDIT_PACKS.find((p) => p.id === resolved.packId);
-    const credits = subscription.billingPeriod === 'ANNUAL' ? pack.annualCredits : pack.monthlyCredits;
-    const result = await grantCreditsForCharge(shopDomain, { chargeKey, credits, type: 'subscription' });
+    const credits = isAnnual ? pack.annualCredits : pack.monthlyCredits;
+    const amountCents = isAnnual ? pack.annualPriceCents : pack.monthlyPriceCents;
+    const result = await grantCreditsForCharge(shopDomain, { chargeKey, credits, type: 'subscription', amountCents });
     return { confirmed: true, ...result };
   }
 
@@ -94,14 +105,33 @@ function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient,
    * Grants credits for a claimed charge, exactly once per `chargeKey` — the
    * shared entry point for both the post-redirect confirm call and
    * billingReconciliation.js's renewal poll (see file header). A no-op if this
-   * chargeKey was already processed.
+   * chargeKey was already processed. `amountCents`, when given, also accrues
+   * referral commission for whoever referred this shop (a no-op if it never
+   * was referred) — exactly once per chargeKey, riding the same claim.
    * @returns {Promise<{ granted: boolean }>}
    */
-  async function grantCreditsForCharge(shopDomain, { chargeKey, credits, type }) {
+  async function grantCreditsForCharge(shopDomain, { chargeKey, credits, type, amountCents }) {
     const claim = await billingChargesRepo.claimCharge(chargeKey, { shopDomain, credits, type });
     if (!claim.claimed) return { granted: false };
     await shopsRepo.updateShop(shopDomain, { creditBalance: FieldValue.increment(credits) });
+    if (amountCents) {
+      await referralsService.recordReferredPayment({ referredShopDomain: shopDomain, amountCents });
+    }
     return { granted: true };
+  }
+
+  /**
+   * The Unlimited plan has no credits to claim against, but still needs the
+   * exact same exactly-once-per-billing-cycle guarantee before accruing
+   * referral commission — reuses the same billingChargesRepo claim
+   * grantCreditsForCharge does, just with credits:0 (no balance change).
+   */
+  async function recordUnlimitedRevenueOnce(shopDomain, { chargeKey, amountCents }) {
+    const claim = await billingChargesRepo.claimCharge(chargeKey, { shopDomain, credits: 0, type: 'subscription' });
+    if (claim.claimed && amountCents) {
+      await referralsService.recordReferredPayment({ referredShopDomain: shopDomain, amountCents });
+    }
+    return { granted: claim.claimed };
   }
 
   /**
@@ -124,6 +154,7 @@ function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient,
     getPricingPlansUrl,
     confirmAppPricingPlan,
     grantCreditsForCharge,
+    recordUnlimitedRevenueOnce,
     activateUnlimitedPlan,
     deactivateUnlimitedPlan,
   };
@@ -137,12 +168,14 @@ function getBillingService() {
     const { getBillingChargesRepo } = require('../repos/billingChargesRepo');
     const { getShopify } = require('../config/shopify');
     const { getPartnerApiClient } = require('./partnerApiClient');
+    const { getReferralsService } = require('./referralsService');
     const { FieldValue } = require('firebase-admin/firestore');
     singleton = createBillingService({
       shopsRepo: getShopsRepo(),
       billingChargesRepo: getBillingChargesRepo(),
       getGraphqlClient: (session) => new (getShopify().api.clients.Graphql)({ session }),
       partnerApiClient: getPartnerApiClient(),
+      referralsService: getReferralsService(),
       FieldValue,
     });
   }

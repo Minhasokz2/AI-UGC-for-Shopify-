@@ -20,6 +20,7 @@
 const { createFalClient } = require('@fal-ai/client');
 const { env } = require('../config/env');
 const { ALLOWED_MODELS } = require('./allowedModelsSeedData');
+const { buildRequestInput } = require('./extendedModels');
 
 const SCENE_CATALOG_CATEGORIES = new Set(['scene', 'ugc', 'color_safe']);
 
@@ -49,17 +50,16 @@ function getClient() {
 }
 
 /**
+ * Delegates to extendedModels.buildRequestInput so a model whose inputShape
+ * is 'image_urls_prompt' (e.g. the UGC image-editing model, multi-image
+ * scene edits) actually gets its images sent as an array — this file
+ * previously always built `{ [imageParam]: imageUrl }` (a bare string),
+ * which fal.ai rejects for any model expecting a plural `image_urls` field.
  * @param {object} model a CUSTOM_SCENE_MODELS entry
- * @param {string} imageUrl
- * @param {string} [prompt]
+ * @param {{ imageUrl?: string, imageUrls?: string[], prompt?: string }} params
  */
-function buildInput(model, imageUrl, prompt) {
-  if (typeof model.imageParam !== 'string') {
-    throw new Error(
-      `fal.js: model "${model.id}" has a non-string imageParam (dual_image shape) — not supported by fal.js's generateOne/generateBatch, use extendedModels.js's buildRequestInput instead`,
-    );
-  }
-  return { [model.imageParam]: imageUrl, prompt };
+function buildInput(model, { imageUrl, imageUrls, prompt } = {}) {
+  return buildRequestInput(model, { imageUrl, imageUrls, prompt });
 }
 
 /**
@@ -77,11 +77,12 @@ function unwrapSingle(model, data) {
 }
 
 /**
- * Runs one scene/UGC/color-safe model for a single image, returning `{ url }`.
- * @param {{ model: object, imageUrl: string, prompt?: string, client?: object }} params
+ * Runs one scene/UGC/color-safe model for a single image or an image set,
+ * returning `{ url }`.
+ * @param {{ model: object, imageUrl?: string, imageUrls?: string[], prompt?: string, client?: object }} params
  */
-async function generateOne({ model, imageUrl, prompt, client = getClient() }) {
-  const input = buildInput(model, imageUrl, prompt);
+async function generateOne({ model, imageUrl, imageUrls, prompt, client = getClient() }) {
+  const input = buildInput(model, { imageUrl, imageUrls, prompt });
   const result = await client.subscribe(model.endpoint, { input });
   return unwrapSingle(model, result.data);
 }
@@ -92,9 +93,9 @@ async function generateOne({ model, imageUrl, prompt, client = getClient() }) {
  * `outputField: 'image'` model has no batch mode by construction, so calling
  * generateBatch on one is a caller bug and throws rather than being handled
  * gracefully.
- * @param {{ model: object, imageUrl: string, prompt?: string, numImages: number, client?: object }} params
+ * @param {{ model: object, imageUrl?: string, imageUrls?: string[], prompt?: string, numImages: number, client?: object }} params
  */
-async function generateBatch({ model, imageUrl, prompt, numImages, client = getClient() }) {
+async function generateBatch({ model, imageUrl, imageUrls, prompt, numImages, client = getClient() }) {
   if (model.outputField === 'image') {
     throw new Error(
       `fal.js: model "${model.id}" has a singular outputField ("image") — it has no batch mode, generateBatch is a caller bug here`,
@@ -103,7 +104,7 @@ async function generateBatch({ model, imageUrl, prompt, numImages, client = getC
   if (!model.supportsBatch) {
     throw new Error(`fal.js: model "${model.id}" does not support batch generation (supportsBatch is false)`);
   }
-  const input = { ...buildInput(model, imageUrl, prompt), num_images: numImages };
+  const input = { ...buildInput(model, { imageUrl, imageUrls, prompt }), num_images: numImages };
   const result = await client.subscribe(model.endpoint, { input });
   return result.data.images.map((image) => ({ url: image.url }));
 }
