@@ -10,6 +10,10 @@ const SHOP_DEFAULTS = {
   // this one is permanent per shop, so trialCreditsService can never re-grant
   // a second free trial just because googleVerified got reset.
   trialEligibilityLocked: false,
+  // Set only while plan === 'unlimited', to the Partner API's
+  // activeSubscription.billingPeriod ('ANNUAL' | 'EVERY_30_DAYS') — decides
+  // which of UNLIMITED_PLAN's two fair-use caps applies (see credits.js).
+  unlimitedBillingPeriod: null,
   brandStyleProfile: null,
   referralCode: null,
   addOns: { imageOptimizer: false },

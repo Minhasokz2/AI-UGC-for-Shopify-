@@ -167,7 +167,7 @@ describe('services/billingService', () => {
       }
     });
 
-    it('activates the Unlimited plan (no credit grant) once confirmed, regardless of billing period', async () => {
+    it('activates the Unlimited plan (no credit grant) once confirmed, and records the ANNUAL billing period for credits.js\'s cap', async () => {
       const unlimitedHandle = 'unlimited-handle';
       const original = PLAN_HANDLES.unlimited;
       PLAN_HANDLES.unlimited = unlimitedHandle;
@@ -185,7 +185,38 @@ describe('services/billingService', () => {
         const result = await service.confirmAppPricingPlan({}, { shopDomain: 'shop-a.myshopify.com', planHandle: unlimitedHandle });
 
         expect(result).toEqual({ confirmed: true, plan: 'unlimited' });
-        expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a.myshopify.com', { plan: 'unlimited', unlimitedPlanHandle: unlimitedHandle });
+        expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a.myshopify.com', {
+          plan: 'unlimited',
+          unlimitedPlanHandle: unlimitedHandle,
+          unlimitedBillingPeriod: 'ANNUAL',
+        });
+      } finally {
+        PLAN_HANDLES.unlimited = original;
+      }
+    });
+
+    it('records EVERY_30_DAYS as the billing period for a monthly Unlimited subscription', async () => {
+      const unlimitedHandle = 'unlimited-handle';
+      const original = PLAN_HANDLES.unlimited;
+      PLAN_HANDLES.unlimited = unlimitedHandle;
+      try {
+        const partnerApiClient = {
+          getActiveSubscription: vi.fn().mockResolvedValue({
+            billingPeriod: 'EVERY_30_DAYS',
+            currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
+            items: [{ handle: unlimitedHandle }],
+          }),
+        };
+        const shopsRepo = { updateShop: vi.fn().mockResolvedValue(undefined) };
+        const service = createBillingService(makeDeps({ partnerApiClient, shopsRepo }));
+
+        await service.confirmAppPricingPlan({}, { shopDomain: 'shop-a.myshopify.com', planHandle: unlimitedHandle });
+
+        expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a.myshopify.com', {
+          plan: 'unlimited',
+          unlimitedPlanHandle: unlimitedHandle,
+          unlimitedBillingPeriod: 'EVERY_30_DAYS',
+        });
       } finally {
         PLAN_HANDLES.unlimited = original;
       }
@@ -218,22 +249,26 @@ describe('services/billingService', () => {
   });
 
   describe('activateUnlimitedPlan / deactivateUnlimitedPlan', () => {
-    it('activateUnlimitedPlan sets plan to unlimited and records the plan handle', async () => {
+    it('activateUnlimitedPlan sets plan to unlimited and records the plan handle + billing period', async () => {
       const shopsRepo = { updateShop: vi.fn().mockResolvedValue(undefined) };
       const service = createBillingService(makeDeps({ shopsRepo }));
 
-      await service.activateUnlimitedPlan('shop-a', 'unlimited-handle');
+      await service.activateUnlimitedPlan('shop-a', 'unlimited-handle', 'EVERY_30_DAYS');
 
-      expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a', { plan: 'unlimited', unlimitedPlanHandle: 'unlimited-handle' });
+      expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a', {
+        plan: 'unlimited',
+        unlimitedPlanHandle: 'unlimited-handle',
+        unlimitedBillingPeriod: 'EVERY_30_DAYS',
+      });
     });
 
-    it('deactivateUnlimitedPlan reverts plan to metered and clears the plan handle', async () => {
+    it('deactivateUnlimitedPlan reverts plan to metered and clears the plan handle + billing period', async () => {
       const shopsRepo = { updateShop: vi.fn().mockResolvedValue(undefined) };
       const service = createBillingService(makeDeps({ shopsRepo }));
 
       await service.deactivateUnlimitedPlan('shop-a');
 
-      expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a', { plan: 'metered', unlimitedPlanHandle: null });
+      expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a', { plan: 'metered', unlimitedPlanHandle: null, unlimitedBillingPeriod: null });
     });
   });
 });

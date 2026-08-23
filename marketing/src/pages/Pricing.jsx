@@ -89,12 +89,18 @@ export default function Pricing() {
             <div className="pricing-unlimited">
               <h3>{pricing.unlimitedPlan.label}</h3>
               <div className="pricing-card__price">
-                {formatCentsToDollars(pricing.unlimitedPlan.monthlyPriceCents)}
-                <span style={{ fontSize: '0.9rem', fontWeight: 400 }}>/mo</span>
+                {formatCentsToDollars(
+                  billingCycle === 'monthly' ? pricing.unlimitedPlan.monthlyPriceCents : pricing.unlimitedPlan.annualPriceCents,
+                )}
+                <span style={{ fontSize: '0.9rem', fontWeight: 400 }}>/{billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
               </div>
               <p className="pricing-card__credits">
-                Unlimited generations, flat monthly rate — fair use up to{' '}
-                {pricing.unlimitedPlan.fairUseCreditsPerMonth?.toLocaleString()} credits/mo.
+                Unlimited generations — fair use up to{' '}
+                {(billingCycle === 'monthly'
+                  ? pricing.unlimitedPlan.fairUseCreditsPerMonth
+                  : pricing.unlimitedPlan.fairUseCreditsPerMonthAnnual
+                )?.toLocaleString()}{' '}
+                credits/mo.
               </p>
             </div>
           )}

@@ -80,7 +80,7 @@ function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient,
     const chargeKey = `app-pricing:${planHandle}:${subscription.currentBillingCycle.startTime}`;
 
     if (resolved.unlimited) {
-      await activateUnlimitedPlan(shopDomain, planHandle);
+      await activateUnlimitedPlan(shopDomain, planHandle, subscription.billingPeriod);
       return { confirmed: true, plan: 'unlimited' };
     }
 
@@ -104,14 +104,20 @@ function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient,
     return { granted: true };
   }
 
-  /** Marks a shop as being on the Unlimited plan once its subscription is confirmed active. */
-  async function activateUnlimitedPlan(shopDomain, planHandle) {
-    await shopsRepo.updateShop(shopDomain, { plan: 'unlimited', unlimitedPlanHandle: planHandle });
+  /**
+   * Marks a shop as being on the Unlimited plan once its subscription is
+   * confirmed active. `billingPeriod` ('ANNUAL' | 'EVERY_30_DAYS', straight
+   * from the Partner API) decides which fair-use cap credits.js enforces —
+   * an annual subscriber's lower effective monthly revenue needs a smaller
+   * cap than a monthly subscriber's to keep clearing MARGIN_TARGET.
+   */
+  async function activateUnlimitedPlan(shopDomain, planHandle, billingPeriod) {
+    await shopsRepo.updateShop(shopDomain, { plan: 'unlimited', unlimitedPlanHandle: planHandle, unlimitedBillingPeriod: billingPeriod });
   }
 
   /** Reverts a shop to the metered plan once its Unlimited subscription is no longer active. */
   async function deactivateUnlimitedPlan(shopDomain) {
-    await shopsRepo.updateShop(shopDomain, { plan: 'metered', unlimitedPlanHandle: null });
+    await shopsRepo.updateShop(shopDomain, { plan: 'metered', unlimitedPlanHandle: null, unlimitedBillingPeriod: null });
   }
 
   return {

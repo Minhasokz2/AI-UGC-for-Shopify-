@@ -15,15 +15,26 @@ describe('services/billingPacks', () => {
     expect(rates[1]).toBeGreaterThan(rates[2]);
   });
 
-  it('every pack\'s annual price is 10x its monthly price and annual credits are 12x monthly credits', () => {
+  it('every pack\'s annual price is a real discount off 12 months of the monthly price, and annual credits are 12x monthly credits', () => {
+    // Not required to be an exact 10x multiple — Partner Dashboard's actual
+    // configured prices use charm pricing ($499/$999, not $490/$990) — just
+    // that paying annually is genuinely cheaper than paying monthly all year.
     for (const pack of CREDIT_PACKS) {
-      expect(pack.annualPriceCents).toBe(pack.monthlyPriceCents * 10);
+      expect(pack.annualPriceCents).toBeLessThan(pack.monthlyPriceCents * 12);
       expect(pack.annualCredits).toBe(pack.monthlyCredits * 12);
     }
   });
 
-  it('defines an unlimited plan', () => {
+  it('defines an unlimited plan with both a monthly and annual price, each with its own fair-use cap', () => {
     expect(UNLIMITED_PLAN.monthlyPriceCents).toBeGreaterThan(0);
+    expect(UNLIMITED_PLAN.annualPriceCents).toBeGreaterThan(0);
+    expect(UNLIMITED_PLAN.annualPriceCents).toBeLessThan(UNLIMITED_PLAN.monthlyPriceCents * 12);
+    expect(UNLIMITED_PLAN.fairUseCreditsPerMonth).toBeGreaterThan(0);
+    // The annual plan's effective monthly revenue is lower than the flat
+    // monthly price, so its cap must be smaller too — an equal cap would let
+    // an annual subscriber's worst-case usage push margin below MARGIN_TARGET.
+    expect(UNLIMITED_PLAN.fairUseCreditsPerMonthAnnual).toBeGreaterThan(0);
+    expect(UNLIMITED_PLAN.fairUseCreditsPerMonthAnnual).toBeLessThan(UNLIMITED_PLAN.fairUseCreditsPerMonth);
   });
 
   describe('computeCreditsForAmount', () => {

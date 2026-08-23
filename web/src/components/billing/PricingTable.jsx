@@ -55,14 +55,16 @@ export function PricingTable({ packs, unlimitedPlan, onViewPlans }) {
                 {unlimitedPlan.label}
               </Text>
               <Text as="p" variant="headingLg">
-                {formatCurrency(unlimitedPlan.monthlyPriceCents)}
+                {formatCurrency(period === 'monthly' ? unlimitedPlan.monthlyPriceCents : unlimitedPlan.annualPriceCents)}
                 <Text as="span" tone="subdued">
                   {' '}
-                  / mo
+                  / {period === 'monthly' ? 'mo' : 'yr'}
                 </Text>
               </Text>
               <Text as="p" tone="subdued">
-                Unlimited generations, fair use up to {unlimitedPlan.fairUseCreditsPerMonth?.toLocaleString()} credits/mo
+                Unlimited generations, fair use up to{' '}
+                {(period === 'monthly' ? unlimitedPlan.fairUseCreditsPerMonth : unlimitedPlan.fairUseCreditsPerMonthAnnual)?.toLocaleString()}{' '}
+                credits/mo
               </Text>
             </BlockStack>
           </Card>

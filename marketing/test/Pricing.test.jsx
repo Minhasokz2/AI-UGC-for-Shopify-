@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Pricing from '../src/pages/Pricing.jsx';
@@ -22,7 +22,14 @@ const PRICING_PAYLOAD = {
       annualCredits: 2400,
     },
   ],
-  unlimitedPlan: { id: 'unlimited', label: 'Unlimited', monthlyPriceCents: 9900, fairUseCreditsPerMonth: 5436 },
+  unlimitedPlan: {
+    id: 'unlimited',
+    label: 'Unlimited',
+    monthlyPriceCents: 9900,
+    annualPriceCents: 99000,
+    fairUseCreditsPerMonth: 5436,
+    fairUseCreditsPerMonthAnnual: 4503,
+  },
 };
 
 function renderPricing() {
@@ -63,6 +70,21 @@ describe('Pricing page', () => {
     expect(screen.getByText('$19.00')).toBeInTheDocument();
     expect(screen.getByText('Unlimited')).toBeInTheDocument();
     expect(screen.getByText('$99.00')).toBeInTheDocument();
+  });
+
+  it('toggles the Unlimited plan to its own annual price and fair-use cap', async () => {
+    fetch.mockResolvedValueOnce({ ok: true, json: async () => PRICING_PAYLOAD });
+
+    renderPricing();
+
+    await waitFor(() => {
+      expect(screen.getByText('Unlimited')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Annual' }));
+
+    expect(screen.getByText('$990.00')).toBeInTheDocument();
+    expect(screen.getByText('4,503', { exact: false })).toBeInTheDocument();
   });
 
   it('shows an error message when the fetch fails', async () => {

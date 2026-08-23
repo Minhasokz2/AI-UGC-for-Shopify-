@@ -121,7 +121,7 @@ describe('services/billingReconciliation', () => {
 
         const result = await reconciliation.reconcileShop({ shopDomain: 'shop-a.myshopify.com', plan: 'metered' });
 
-        expect(billingService.activateUnlimitedPlan).toHaveBeenCalledWith('shop-a.myshopify.com', unlimitedHandle);
+        expect(billingService.activateUnlimitedPlan).toHaveBeenCalledWith('shop-a.myshopify.com', unlimitedHandle, 'EVERY_30_DAYS');
         expect(billingService.grantCreditsForCharge).not.toHaveBeenCalled();
         expect(result.granted).toBe(0);
       } finally {

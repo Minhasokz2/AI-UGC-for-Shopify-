@@ -146,6 +146,24 @@ describe('services/credits', () => {
         const staleUsage = { month: '2020-01', creditsThisMonth: UNLIMITED_PLAN.fairUseCreditsPerMonth };
         expect(() => credits.assertSufficientCredits({ plan: 'unlimited', unlimitedUsage: staleUsage }, 10)).not.toThrow();
       });
+
+      it('uses the smaller ANNUAL cap for a shop on annual Unlimited billing, not the monthly cap', () => {
+        const { credits } = makeService();
+        const shop = { plan: 'unlimited', unlimitedBillingPeriod: 'ANNUAL', unlimitedUsage: { month: '2026-08', creditsThisMonth: UNLIMITED_PLAN.fairUseCreditsPerMonthAnnual - 5 } };
+        expect(() => credits.assertSufficientCredits(shop, 10)).toThrow(QuotaExceededError);
+      });
+
+      it('an annual-Unlimited shop can still use up to its own (smaller) cap', () => {
+        const { credits } = makeService();
+        const shop = { plan: 'unlimited', unlimitedBillingPeriod: 'ANNUAL', unlimitedUsage: { month: '2026-08', creditsThisMonth: UNLIMITED_PLAN.fairUseCreditsPerMonthAnnual - 10 } };
+        expect(() => credits.assertSufficientCredits(shop, 10)).not.toThrow();
+      });
+
+      it('a shop with no unlimitedBillingPeriod set (or EVERY_30_DAYS) gets the monthly cap', () => {
+        const { credits } = makeService();
+        const shop = { plan: 'unlimited', unlimitedUsage: { month: '2026-08', creditsThisMonth: UNLIMITED_PLAN.fairUseCreditsPerMonthAnnual + 10 } };
+        expect(() => credits.assertSufficientCredits(shop, 1)).not.toThrow();
+      });
     });
   });
 });

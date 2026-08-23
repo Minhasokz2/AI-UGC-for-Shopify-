@@ -7,7 +7,14 @@ const PACKS = [
   { id: 'starter', label: 'Starter', monthlyPriceCents: 1900, monthlyCredits: 200, annualPriceCents: 19000, annualCredits: 2400 },
   { id: 'growth', label: 'Growth', monthlyPriceCents: 4900, monthlyCredits: 600, annualPriceCents: 49000, annualCredits: 7200 },
 ];
-const UNLIMITED_PLAN = { id: 'unlimited', label: 'Unlimited', monthlyPriceCents: 29900, fairUseCreditsPerMonth: 5436 };
+const UNLIMITED_PLAN = {
+  id: 'unlimited',
+  label: 'Unlimited',
+  monthlyPriceCents: 29900,
+  annualPriceCents: 299900,
+  fairUseCreditsPerMonth: 5436,
+  fairUseCreditsPerMonthAnnual: 4503,
+};
 
 function renderTable(props = {}) {
   return render(
@@ -45,5 +52,16 @@ describe('PricingTable', () => {
 
     expect(screen.getByText('$190.00')).toBeInTheDocument();
     expect(screen.getByText('2400', { exact: false })).toBeInTheDocument();
+  });
+
+  it('toggles the Unlimited card to its own annual price and (smaller) annual fair-use cap', () => {
+    renderTable();
+    expect(screen.getByText('$299.00')).toBeInTheDocument();
+    expect(screen.getByText('5,436', { exact: false })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Annual' }));
+
+    expect(screen.getByText('$2,999.00')).toBeInTheDocument();
+    expect(screen.getByText('4,503', { exact: false })).toBeInTheDocument();
   });
 });

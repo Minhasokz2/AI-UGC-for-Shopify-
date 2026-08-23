@@ -86,11 +86,15 @@ function createCreditsService({ db, templatesRepo, allowedModelsRepo }) {
    */
   function assertSufficientCredits(shop, requiredCredits) {
     if (shop.plan === 'unlimited') {
+      // An annual subscriber's effective monthly revenue is lower than a
+      // monthly subscriber's flat rate, so it gets its own, smaller cap
+      // (billingPacks.js's UNLIMITED_PLAN.fairUseCreditsPerMonthAnnual) —
+      // applying the monthly cap here too would let annual usage push margin
+      // below MARGIN_TARGET.
+      const cap = shop.unlimitedBillingPeriod === 'ANNUAL' ? UNLIMITED_PLAN.fairUseCreditsPerMonthAnnual : UNLIMITED_PLAN.fairUseCreditsPerMonth;
       const usedThisMonth = unlimitedCreditsUsedThisMonth(shop);
-      if (usedThisMonth + requiredCredits > UNLIMITED_PLAN.fairUseCreditsPerMonth) {
-        throw new QuotaExceededError(
-          `Unlimited plan fair-use cap reached (${UNLIMITED_PLAN.fairUseCreditsPerMonth} credits this month) — resets on the 1st.`,
-        );
+      if (usedThisMonth + requiredCredits > cap) {
+        throw new QuotaExceededError(`Unlimited plan fair-use cap reached (${cap} credits this month) — resets on the 1st.`);
       }
       return;
     }

@@ -15,13 +15,21 @@
 
 const { ValidationError } = require('../errors/AppError');
 
+// Prices here MUST match exactly what's configured for each plan in Partner
+// Dashboard (Shopify App Pricing) — Shopify is what actually charges the
+// merchant, so a mismatch here would just be a wrong number shown in-app/on
+// the marketing site while Shopify charges something else. Annual isn't a
+// clean 10x of monthly for Growth/Scale (charm pricing: $499/$999, not
+// $490/$990) — that's fine for margin (a HIGHER real price than a clean 10x
+// would be only improves the worst-case rate below), just keep it in sync
+// with Partner Dashboard if either ever changes.
 const CREDIT_PACKS = Object.freeze([
   Object.freeze({ id: 'starter', label: 'Starter', monthlyPriceCents: 1900, monthlyCredits: 200, annualPriceCents: 19000, annualCredits: 2400 }),
-  Object.freeze({ id: 'growth', label: 'Growth', monthlyPriceCents: 4900, monthlyCredits: 600, annualPriceCents: 49000, annualCredits: 7200 }),
+  Object.freeze({ id: 'growth', label: 'Growth', monthlyPriceCents: 4900, monthlyCredits: 600, annualPriceCents: 49900, annualCredits: 7200 }),
   // Scale is the bulk-discount tier — the lowest revenue-per-credit rate of
   // the three packs at a given period, and (see WORST_CASE_REVENUE_PER_CREDIT_USD
   // below) its annual rate is the single lowest rate across the whole catalog.
-  Object.freeze({ id: 'scale', label: 'Scale', monthlyPriceCents: 9900, monthlyCredits: 1500, annualPriceCents: 99000, annualCredits: 18000 }),
+  Object.freeze({ id: 'scale', label: 'Scale', monthlyPriceCents: 9900, monthlyCredits: 1500, annualPriceCents: 99900, annualCredits: 18000 }),
 ]);
 
 const MIN_CUSTOM_PURCHASE_CENTS = 500;
@@ -67,16 +75,28 @@ function minCreditCostForMargin(actualCostUsd) {
 // Enforced by credits.js/jobsRepo.js; surfaced to merchants as fair-use copy,
 // never advertised as literally infinite.
 const UNLIMITED_MONTHLY_PRICE_CENTS = 29900;
+// Also billable annually in Partner Dashboard (Shopify App Pricing lets any
+// plan offer both). Its EFFECTIVE monthly revenue ($2999/12 ≈ $249.92) is
+// lower than the flat monthly price — an annual subscriber who maxed out the
+// SAME fair-use cap as a monthly subscriber would push margin below
+// MARGIN_TARGET, so this gets its own, smaller cap sized off its own
+// effective monthly rate. credits.js picks between the two based on
+// shop.unlimitedBillingPeriod (set by billingService.activateUnlimitedPlan
+// from the Partner API's activeSubscription.billingPeriod).
+const UNLIMITED_ANNUAL_PRICE_CENTS = 299900;
 // cap * (WORST_CASE_REVENUE_PER_CREDIT_USD * (1-MARGIN_TARGET)) [the max any
 // single model can cost per credit, by construction of minCreditCostForMargin]
 // == (1-MARGIN_TARGET) * price  =>  cap == price / WORST_CASE_REVENUE_PER_CREDIT_USD.
 // The MARGIN_TARGET terms cancel — the cap is just "however many credits
-// $299 would buy at the worst floor rate", independent of the target itself.
+// the plan's effective monthly revenue would buy at the worst floor rate",
+// independent of the target itself.
 const UNLIMITED_PLAN = Object.freeze({
   id: 'unlimited',
   label: 'Unlimited',
   monthlyPriceCents: UNLIMITED_MONTHLY_PRICE_CENTS,
+  annualPriceCents: UNLIMITED_ANNUAL_PRICE_CENTS,
   fairUseCreditsPerMonth: Math.floor((UNLIMITED_MONTHLY_PRICE_CENTS / 100) / WORST_CASE_REVENUE_PER_CREDIT_USD),
+  fairUseCreditsPerMonthAnnual: Math.floor((UNLIMITED_ANNUAL_PRICE_CENTS / 100 / 12) / WORST_CASE_REVENUE_PER_CREDIT_USD),
 });
 
 /**

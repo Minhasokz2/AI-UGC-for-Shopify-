@@ -78,7 +78,7 @@ function createBillingReconciliation({ shopsRepo, billingService, getGraphqlClie
 
       if (resolved.unlimited) {
         // eslint-disable-next-line no-await-in-loop
-        await billingService.activateUnlimitedPlan(shopDomain, item.handle);
+        await billingService.activateUnlimitedPlan(shopDomain, item.handle, subscription.billingPeriod);
         continue;
       }
 
