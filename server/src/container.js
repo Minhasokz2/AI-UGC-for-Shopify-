@@ -85,7 +85,6 @@ function buildDependencies({
     shopsRepo,
     billingChargesRepo,
     getGraphqlClient,
-    isTestCharge: env.NODE_ENV !== 'production',
     FieldValue,
   });
   const billingReconciliation = createBillingReconciliation({
@@ -105,7 +104,7 @@ function buildDependencies({
     emailService,
     log: (fields, message) => logger.error(fields, message),
   });
-  const webhookHandlers = createWebhookHandlers({ shopsRepo, productsRepo, sessionStorage: shopify.config.sessionStorage });
+  const webhookHandlers = createWebhookHandlers({ shopsRepo, productsRepo, billingService, sessionStorage: shopify.config.sessionStorage });
 
   const jobWorker = createJobWorker({ jobsRepo, templatesRepo, allowedModelsRepo, credits, workerId, logger });
   const imageOptimizerWorker = createImageOptimizerWorker({ conversionJobsRepo, imageOptimizerService, workerId, logger });

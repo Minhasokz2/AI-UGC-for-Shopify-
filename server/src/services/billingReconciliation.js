@@ -103,9 +103,15 @@ function createBillingReconciliation({ shopsRepo, billingService, getGraphqlClie
 
 /**
  * Maps a subscription's display name (as billingService.js constructs it —
- * e.g. "AI UGC Generator Growth (Monthly)") back to its monthly credit grant. Pure
- * and exported so container.js can build the production billingReconciliation
- * instance with the exact same mapping this file's own singleton uses.
+ * e.g. "AI UGC Generator Growth (Annual)") back to that billing cycle's credit
+ * grant — annual and monthly must resolve to DIFFERENT amounts (an annual
+ * subscriber already paid for a full year; crediting the monthly amount on
+ * this sweep's renewal check would under-credit them every cycle it fires),
+ * exactly mirroring routes/api/billing.js's own confirm handler so a renewal
+ * caught here is never priced differently than the initial activation was.
+ * Pure and exported so container.js can build the production
+ * billingReconciliation instance with the exact same mapping this file's own
+ * singleton uses.
  * @param {string} subscriptionName
  * @returns {number|null} credits to grant, 0 for Unlimited (never draws down a
  *   balance), or null if the name doesn't match any known pack/plan.
@@ -113,7 +119,7 @@ function createBillingReconciliation({ shopsRepo, billingService, getGraphqlClie
 function creditsForPack(subscriptionName) {
   const { CREDIT_PACKS, UNLIMITED_PLAN } = require('./billingPacks');
   const pack = CREDIT_PACKS.find((p) => subscriptionName.includes(p.label));
-  if (pack) return pack.monthlyCredits;
+  if (pack) return subscriptionName.includes('Annual') ? pack.annualCredits : pack.monthlyCredits;
   if (subscriptionName.includes(UNLIMITED_PLAN.label)) return 0;
   return null;
 }

@@ -13,9 +13,18 @@ function makeDeps(overrides = {}) {
     shopsRepo: { updateShop: vi.fn().mockResolvedValue(undefined) },
     billingChargesRepo: { claimCharge: vi.fn().mockResolvedValue({ claimed: true }) },
     getGraphqlClient: vi.fn(),
-    isTestCharge: true,
     FieldValue,
     ...overrides,
+  };
+}
+
+/** A client whose FIRST request (the shop-plan check) resolves partnerDevelopment, then the mutation. */
+function makeClient({ partnerDevelopment, mutationResponse }) {
+  return {
+    request: vi
+      .fn()
+      .mockResolvedValueOnce({ data: { shop: { plan: { partnerDevelopment } } } })
+      .mockResolvedValueOnce(mutationResponse),
   };
 }
 
@@ -58,8 +67,9 @@ describe('services/billingService', () => {
     });
 
     it('calls appSubscriptionCreate and returns the confirmationUrl/subscriptionId on success', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
+      const client = makeClient({
+        partnerDevelopment: false,
+        mutationResponse: {
           data: {
             appSubscriptionCreate: {
               appSubscription: { id: 'gid://shopify/AppSubscription/1' },
@@ -67,13 +77,14 @@ describe('services/billingService', () => {
               userErrors: [],
             },
           },
-        }),
-      };
+        },
+      });
       const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
 
       const result = await service.createPackSubscription({ shop: 's' }, { packId: 'starter', returnUrl: 'https://x/return' });
 
-      expect(client.request).toHaveBeenCalledWith(
+      expect(client.request).toHaveBeenNthCalledWith(
+        2,
         expect.stringContaining('appSubscriptionCreate'),
         expect.objectContaining({ variables: expect.objectContaining({ returnUrl: 'https://x/return' }) }),
       );
@@ -85,12 +96,27 @@ describe('services/billingService', () => {
       );
     });
 
+    it('passes test:true when the connected shop is a Partner development store, regardless of server NODE_ENV', async () => {
+      const client = makeClient({
+        partnerDevelopment: true,
+        mutationResponse: {
+          data: { appSubscriptionCreate: { appSubscription: { id: 'gid://x/1' }, confirmationUrl: 'https://x', userErrors: [] } },
+        },
+      });
+      const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
+
+      await service.createPackSubscription({ shop: 's' }, { packId: 'starter', returnUrl: 'https://x/return' });
+
+      expect(client.request).toHaveBeenNthCalledWith(2, expect.anything(), expect.objectContaining({ variables: expect.objectContaining({ test: true }) }));
+    });
+
     it('throws PublishError when the mutation returns userErrors', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
+      const client = makeClient({
+        partnerDevelopment: false,
+        mutationResponse: {
           data: { appSubscriptionCreate: { appSubscription: null, confirmationUrl: null, userErrors: [{ field: [], message: 'Invalid plan' }] } },
-        }),
-      };
+        },
+      });
       const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
 
       await expect(
@@ -101,8 +127,9 @@ describe('services/billingService', () => {
 
   describe('createUnlimitedSubscription', () => {
     it('calls appSubscriptionCreate for the flat-rate plan', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
+      const client = makeClient({
+        partnerDevelopment: false,
+        mutationResponse: {
           data: {
             appSubscriptionCreate: {
               appSubscription: { id: 'gid://shopify/AppSubscription/2' },
@@ -110,8 +137,8 @@ describe('services/billingService', () => {
               userErrors: [],
             },
           },
-        }),
-      };
+        },
+      });
       const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
 
       const result = await service.createUnlimitedSubscription({ shop: 's' }, { returnUrl: 'https://x/return' });
@@ -122,8 +149,9 @@ describe('services/billingService', () => {
 
   describe('createCustomPurchase', () => {
     it('calls appPurchaseOneTimeCreate and returns the confirmationUrl/purchaseId', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
+      const client = makeClient({
+        partnerDevelopment: false,
+        mutationResponse: {
           data: {
             appPurchaseOneTimeCreate: {
               appPurchaseOneTime: { id: 'gid://shopify/AppPurchaseOneTime/1' },
@@ -131,8 +159,8 @@ describe('services/billingService', () => {
               userErrors: [],
             },
           },
-        }),
-      };
+        },
+      });
       const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
 
       const result = await service.createCustomPurchase({ shop: 's' }, { amountCents: 1000, returnUrl: 'https://x/return' });
@@ -143,16 +171,27 @@ describe('services/billingService', () => {
     });
 
     it('throws PublishError on userErrors', async () => {
-      const client = {
-        request: vi.fn().mockResolvedValue({
+      const client = makeClient({
+        partnerDevelopment: false,
+        mutationResponse: {
           data: { appPurchaseOneTimeCreate: { appPurchaseOneTime: null, confirmationUrl: null, userErrors: [{ field: [], message: 'Amount too low' }] } },
-        }),
-      };
+        },
+      });
+      const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
+
+      await expect(
+        service.createCustomPurchase({ shop: 's' }, { amountCents: 1000, returnUrl: 'https://x/return' }),
+      ).rejects.toBeInstanceOf(PublishError);
+    });
+
+    it('throws ValidationError below the minimum purchase amount WITHOUT ever creating a real charge', async () => {
+      const client = { request: vi.fn() };
       const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
 
       await expect(
         service.createCustomPurchase({ shop: 's' }, { amountCents: 1, returnUrl: 'https://x/return' }),
-      ).rejects.toBeInstanceOf(PublishError);
+      ).rejects.toBeInstanceOf(ValidationError);
+      expect(client.request).not.toHaveBeenCalled();
     });
   });
 

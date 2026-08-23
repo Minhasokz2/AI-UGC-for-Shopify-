@@ -20,6 +20,12 @@ describe('services/billingReconciliation', () => {
       expect(creditsForPack(`AI UGC Generator ${pack.label} (Monthly)`)).toBe(pack.monthlyCredits);
     });
 
+    it('resolves an "(Annual)" subscription name to the pack\'s ANNUAL credits, not monthly — an annual subscriber already paid for a full year', () => {
+      const pack = CREDIT_PACKS.find((p) => p.id === 'growth');
+      expect(creditsForPack(`AI UGC Generator ${pack.label} (Annual)`)).toBe(pack.annualCredits);
+      expect(pack.annualCredits).not.toBe(pack.monthlyCredits);
+    });
+
     it('resolves the Unlimited plan to 0 (never draws down a balance)', () => {
       expect(creditsForPack(`AI UGC Generator ${UNLIMITED_PLAN.label}`)).toBe(0);
     });
