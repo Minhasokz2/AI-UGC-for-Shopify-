@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Frame, Navigation, TopBar, Toast } from '@shopify/polaris';
-import { getAdminApiKey, clearAdminApiKey } from '../lib/apiClient';
+import { getAdminApiKey } from '../lib/apiClient';
 import { useToast } from './ToastProvider';
 
 /**
@@ -24,8 +24,7 @@ function ProtectedShell() {
   const toggleUserMenu = useCallback(() => setUserMenuOpen((open) => !open), []);
 
   const handleSignOut = useCallback(() => {
-    clearAdminApiKey();
-    navigate('/login', { replace: true });
+    navigate('/logout');
   }, [navigate]);
 
   const apiKey = getAdminApiKey();

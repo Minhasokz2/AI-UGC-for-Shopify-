@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
+import { Account } from './pages/Account.jsx';
 import { GenerateHub } from './pages/GenerateHub.jsx';
 import { Templates } from './pages/Templates.jsx';
 import { Studio } from './pages/Studio.jsx';
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       { index: true, element: <Dashboard /> },
+      { path: 'account', element: <Account /> },
       { path: 'generate', element: <GenerateHub /> },
       { path: 'templates', element: <Templates /> },
       { path: 'studio', element: <Studio /> },

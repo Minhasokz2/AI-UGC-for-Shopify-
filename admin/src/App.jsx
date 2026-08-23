@@ -8,6 +8,7 @@ import ModelsList from './pages/ModelsList';
 import ModelEditor from './pages/ModelEditor';
 import MarginCalculator from './pages/MarginCalculator';
 import Ops from './pages/Ops';
+import Logout from './pages/Logout';
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
           <Route path="/models/:id" element={<ModelEditor />} />
           <Route path="/margin-calculator" element={<MarginCalculator />} />
           <Route path="/ops" element={<Ops />} />
+          <Route path="/logout" element={<Logout />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/templates" replace />} />

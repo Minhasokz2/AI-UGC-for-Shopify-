@@ -7,8 +7,7 @@ import { Outlet, Link } from 'react-router-dom';
  * only App Bridge's <NavMenu>, which renders a <ui-nav-menu> the admin
  * shell reads to build its own nav UI.
  *
- * 7 top-level items per spec. The 5 generation modes live one level under
- * /generate, not in the top nav.
+ * The 5 generation modes live one level under /generate, not in the top nav.
  */
 export function AppLayout() {
   return (
@@ -23,6 +22,7 @@ export function AppLayout() {
         <Link to="/settings/brand">Brand Settings</Link>
         <Link to="/billing">Billing</Link>
         <Link to="/referrals">Referrals</Link>
+        <Link to="/account">Account</Link>
       </NavMenu>
       <Outlet />
     </>
