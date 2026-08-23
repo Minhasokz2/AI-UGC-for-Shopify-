@@ -98,7 +98,8 @@ export function Billing() {
               unlimitedPlan={packsData.unlimitedPlan}
               onSubscribe={handleSubscribe}
               onSubscribeUnlimited={handleSubscribeUnlimited}
-              isPending={subscribeToPack.isPending || subscribeUnlimited.isPending}
+              pendingPackId={subscribeToPack.isPending ? subscribeToPack.variables?.packId : undefined}
+              isUnlimitedPending={subscribeUnlimited.isPending}
             />
           </Card>
         )}

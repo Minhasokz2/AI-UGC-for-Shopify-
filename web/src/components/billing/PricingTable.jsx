@@ -2,8 +2,20 @@ import { InlineGrid, Card, BlockStack, Text, Button, ButtonGroup } from '@shopif
 import { useState } from 'react';
 import { formatCurrency } from '../../lib/formatCurrency.js';
 
-export function PricingTable({ packs, unlimitedPlan, onSubscribe, onSubscribeUnlimited, isPending }) {
+/**
+ * @param {{
+ *   packs: object[], unlimitedPlan: object,
+ *   onSubscribe: (packId: string, period: string) => void,
+ *   onSubscribeUnlimited: () => void,
+ *   pendingPackId: string|undefined, isUnlimitedPending: boolean,
+ * }} props `pendingPackId`/`isUnlimitedPending` identify which single button
+ *   actually triggered a submission, so only THAT button shows a spinner —
+ *   the others are merely disabled while any one submission is in flight,
+ *   rather than every plan going into a loading state for one click.
+ */
+export function PricingTable({ packs, unlimitedPlan, onSubscribe, onSubscribeUnlimited, pendingPackId, isUnlimitedPending }) {
   const [period, setPeriod] = useState('monthly');
+  const anyPending = Boolean(pendingPackId) || isUnlimitedPending;
 
   return (
     <BlockStack gap="400">
@@ -36,7 +48,12 @@ export function PricingTable({ packs, unlimitedPlan, onSubscribe, onSubscribeUnl
                 <Text as="p" tone="subdued">
                   {credits} credits
                 </Text>
-                <Button variant="primary" onClick={() => onSubscribe(pack.id, period)} loading={isPending}>
+                <Button
+                  variant="primary"
+                  onClick={() => onSubscribe(pack.id, period)}
+                  loading={pack.id === pendingPackId}
+                  disabled={anyPending && pack.id !== pendingPackId}
+                >
                   Choose {pack.label}
                 </Button>
               </BlockStack>
@@ -60,7 +77,7 @@ export function PricingTable({ packs, unlimitedPlan, onSubscribe, onSubscribeUnl
               <Text as="p" tone="subdued">
                 Unlimited generations, fair use up to {unlimitedPlan.fairUseCreditsPerMonth?.toLocaleString()} credits/mo
               </Text>
-              <Button variant="primary" onClick={onSubscribeUnlimited} loading={isPending}>
+              <Button variant="primary" onClick={onSubscribeUnlimited} loading={isUnlimitedPending} disabled={anyPending && !isUnlimitedPending}>
                 Go Unlimited
               </Button>
             </BlockStack>
