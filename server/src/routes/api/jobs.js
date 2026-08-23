@@ -95,12 +95,20 @@ function createJobsRouter({ jobsRepo, templatesRepo, allowedModelsRepo, credits,
         throw new ConcurrencyLimitError('shop');
       }
 
-      const { costEstimateInput } = await resolveAndEstimate(parsed, { templatesRepo, allowedModelsRepo });
+      const { model, costEstimateInput } = await resolveAndEstimate(parsed, { templatesRepo, allowedModelsRepo });
       const estimatedCost = await credits.estimateJobCost(costEstimateInput);
       credits.assertSufficientCredits(req.shop, estimatedCost);
 
       const { job, isNew } = await jobsRepo.claimAndCreateJob(req.shopDomain, idempotencyKey, {
         ...parsed,
+        // Persona/Video/tryOn/template-less-scene jobs never carry a modelId
+        // from the client (they're auto-routed) — without this, settlement's
+        // recomputeCost has neither a templateId nor a modelId to look up a
+        // cost from and throws, so the job fails AFTER the generation was
+        // already paid for at fal/WaveSpeed but the merchant is never charged.
+        // Skipped for template jobs: a template's OWN creditCost (looked up by
+        // templateId) can deliberately differ from its underlying model's.
+        ...(parsed.templateId ? {} : { modelId: parsed.modelId || model.id }),
         shopDomain: req.shopDomain,
         status: 'pending',
         progressStage: null,

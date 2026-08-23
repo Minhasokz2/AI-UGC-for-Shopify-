@@ -1,5 +1,6 @@
 const request = require('supertest');
 const { buildTestApp } = require('../../helpers/buildTestApp');
+const { seedAllowedModels } = require('../../../src/services/allowedModelsSeedData');
 
 const SHOP = 'test-shop.myshopify.com';
 
@@ -105,5 +106,30 @@ describe('integration: /api/batches', () => {
       .send({ contentType: 'custom', prompt: 'a cat', items: [{ sourceImageUrl: 'https://cdn/1.png' }] });
 
     expect(res.status).toBe(400);
+  });
+
+  it('persists a real modelId on every job of an auto-routed (no templateId) batch, so settlement can charge it', async () => {
+    const { app, db } = buildTestApp();
+    await seedShop(db, { creditBalance: 1000 });
+    await seedAllowedModels({ db });
+
+    const res = await request(app)
+      .post('/api/batches')
+      .set('Idempotency-Key', 'batch-6')
+      .send({
+        contentType: 'ugc',
+        personaAttributes: { ageRange: 'adult' },
+        items: [{ sourceImageUrl: 'https://cdn/1.png' }, { sourceImageUrl: 'https://cdn/2.png' }],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.jobs).toHaveLength(2);
+    for (const job of res.body.jobs) {
+      expect(job.modelId).toBeTruthy();
+      expect(job.templateId).toBeUndefined();
+      // eslint-disable-next-line no-await-in-loop
+      const model = await db.collection('allowed_models').doc(job.modelId).get();
+      expect(model.exists).toBe(true);
+    }
   });
 });

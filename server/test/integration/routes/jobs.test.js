@@ -186,6 +186,55 @@ describe('integration: /api/jobs', () => {
 
       expect(res.status).toBe(201);
     });
+
+    it('persists a real modelId on an auto-routed (no templateId) job, so settlement can charge it — regression for jobs that used to settle with neither templateId nor modelId', async () => {
+      const { app, db } = buildTestApp();
+      await seedShop(db, { creditBalance: 1000 });
+      await seedAllowedModels({ db });
+
+      const res = await request(app)
+        .post('/api/jobs')
+        .set('Idempotency-Key', 'idem-ugc-modelid')
+        .send({ contentType: 'ugc', sourceImageUrl: 'https://cdn/raw.png', personaAttributes: { ageRange: 'adult' } });
+
+      expect(res.status).toBe(201);
+      expect(res.body.job.modelId).toBeTruthy();
+      expect(res.body.job.templateId).toBeUndefined();
+      const model = await db.collection('allowed_models').doc(res.body.job.modelId).get();
+      expect(model.exists).toBe(true);
+    });
+
+    it('persists a real video modelId (matching the chosen videoTier) on a Video Studio job', async () => {
+      const { app, db } = buildTestApp();
+      await seedShop(db, { creditBalance: 1000 });
+      await seedAllowedModels({ db });
+
+      const res = await request(app)
+        .post('/api/jobs')
+        .set('Idempotency-Key', 'idem-video-modelid')
+        .send({ contentType: 'video', sourceImageUrl: 'https://cdn/raw.png', videoTier: 'fast', prompt: 'slow pan' });
+
+      expect(res.status).toBe(201);
+      expect(res.body.job.modelId).toBeTruthy();
+      const model = await db.collection('allowed_models').doc(res.body.job.modelId).get();
+      expect(model.exists).toBe(true);
+      expect(model.data().category).toBe('video');
+    });
+
+    it('a templateId-based job does NOT also get a modelId written — the template\'s own creditCost stays the settlement lookup key', async () => {
+      const { app, db } = buildTestApp();
+      await seedShop(db, { creditBalance: 1000 });
+      await db.collection('templates').doc('tpl-1').set({ category: 'scene', modelRole: 'default_scene', creditCost: 3 });
+
+      const res = await request(app)
+        .post('/api/jobs')
+        .set('Idempotency-Key', 'idem-template-no-modelid')
+        .send({ contentType: 'scene', templateId: 'tpl-1', sourceImageUrl: 'https://cdn/raw.png' });
+
+      expect(res.status).toBe(201);
+      expect(res.body.job.templateId).toBe('tpl-1');
+      expect(res.body.job.modelId).toBeUndefined();
+    });
   });
 
   describe('GET /api/jobs and GET /api/jobs/:jobId', () => {

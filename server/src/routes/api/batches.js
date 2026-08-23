@@ -62,7 +62,7 @@ function createBatchesRouter({ jobsRepo, batchesRepo, templatesRepo, allowedMode
         throw new ConcurrencyLimitError('shop');
       }
 
-      const { costEstimateInput } = await resolveAndEstimate(parsed, { templatesRepo, allowedModelsRepo });
+      const { model, costEstimateInput } = await resolveAndEstimate(parsed, { templatesRepo, allowedModelsRepo });
       const perItemCost = await credits.estimateJobCost(costEstimateInput);
       credits.assertSufficientCredits(req.shop, perItemCost * parsed.items.length);
 
@@ -78,8 +78,13 @@ function createBatchesRouter({ jobsRepo, batchesRepo, templatesRepo, allowedMode
         // eslint-disable-next-line no-await-in-loop
         const { job } = await jobsRepo.claimAndCreateJob(req.shopDomain, `${idempotencyKey}:${i}`, {
           contentType: parsed.contentType,
-          templateId: parsed.templateId,
-          modelId: parsed.modelId,
+          // Never write templateId/modelId as an explicit `undefined` — Firestore
+          // rejects that (config/firebase.js doesn't set ignoreUndefinedProperties)
+          // and would abort this AFTER batchesRepo.createBatch already committed,
+          // orphaning the batch doc. Also gives non-template jobs (Persona/Video/
+          // tryOn/auto-scene) a real modelId so settlement can charge at all —
+          // same fix as routes/api/jobs.js.
+          ...(parsed.templateId ? { templateId: parsed.templateId } : { modelId: parsed.modelId || model.id }),
           prompt: parsed.prompt,
           numImages: parsed.numImages,
           personaAttributes: parsed.personaAttributes,

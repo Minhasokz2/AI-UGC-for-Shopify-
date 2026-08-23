@@ -18,6 +18,15 @@ describe('services/templatesSeedData', () => {
     expect(new Set(slugs).size).toBe(slugs.length);
   });
 
+  it('every template\'s creditCost matches its modelRole\'s underlying model cost — a template must never charge less than what the generation actually costs', () => {
+    for (const template of TEMPLATES) {
+      const model = template.category === 'video'
+        ? ALLOWED_MODELS.find((m) => m.category === 'video' && m.role === template.modelRole)
+        : CUSTOM_SCENE_MODELS[template.modelRole];
+      expect(template.creditCost).toBe(model.creditCost);
+    }
+  });
+
   describe('seedTemplates', () => {
     it('creates every template on a fresh database', async () => {
       const db = createFakeFirestore();

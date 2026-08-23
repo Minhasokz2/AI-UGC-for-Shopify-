@@ -15,7 +15,10 @@ const TEMPLATES = [
     category: 'scene',
     modelRole: 'default_scene',
     prompt: 'Place the product on a clean, seamless white studio background with soft, even lighting and a subtle shadow.',
-    creditCost: 1,
+    // Matches default_scene's underlying model (flux-kontext-dev-default-scene,
+    // allowedModelsSeedData.js) — was 1, stale since that model's cost was
+    // raised to 2 during an earlier margin pass that never touched this file.
+    creditCost: 2,
   },
   {
     slug: 'lifestyle-marble-counter',
@@ -23,7 +26,9 @@ const TEMPLATES = [
     category: 'scene',
     modelRole: 'photorealistic_color_safe',
     prompt: 'Place the product on a bright marble kitchen counter with natural morning light, color-accurate to the original product.',
-    creditCost: 2,
+    // Matches photorealistic_color_safe's underlying model
+    // (bria-product-shot-color-safe) — was 2, same stale-drift bug.
+    creditCost: 3,
   },
   {
     slug: 'ugc-model-holding-product',
@@ -31,7 +36,9 @@ const TEMPLATES = [
     category: 'ugc',
     modelRole: 'image_editing_ugc',
     prompt: 'Show a person naturally holding and using the product in a casual, everyday setting, smiling at the camera.',
-    creditCost: 2,
+    // Matches image_editing_ugc's underlying model (nano-banana-edit-ugc) —
+    // was 2, same stale-drift bug.
+    creditCost: 3,
   },
   {
     slug: 'video-360-turntable',
@@ -39,7 +46,9 @@ const TEMPLATES = [
     category: 'video',
     modelRole: 'video_fast',
     prompt: 'Slowly rotate the product 360 degrees on a clean studio turntable with soft, even lighting.',
-    creditCost: 8,
+    // Matches video_fast's underlying model (wan25-preview-video-fast,
+    // allowedModelsSeedData.js) — was 8, roughly half the real cost.
+    creditCost: 16,
   },
   {
     slug: 'video-lifestyle-motion',
@@ -47,7 +56,9 @@ const TEMPLATES = [
     category: 'video',
     modelRole: 'video_standard',
     prompt: 'Show the product in gentle, natural motion in a lifestyle setting that highlights its use.',
-    creditCost: 12,
+    // Matches video_standard's underlying model (kling25-turbo-pro-video-standard,
+    // allowedModelsSeedData.js) — was 12, roughly half the real cost.
+    creditCost: 22,
   },
 ];
 
