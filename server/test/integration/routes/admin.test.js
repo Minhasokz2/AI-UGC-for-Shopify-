@@ -77,6 +77,33 @@ describe('integration: /admin/api', () => {
     expect(nurture.body.results).toEqual([]);
   });
 
+  it('lists installed shops and lets an operator adjust a shop\'s credit balance', async () => {
+    const { app, db } = buildTestApp();
+    await db.collection('shops').doc('admin-test.myshopify.com').set({
+      shopDomain: 'admin-test.myshopify.com',
+      creditBalance: 10,
+      plan: 'metered',
+      verifiedEmail: 'admin@example.com',
+      uninstalledAt: null,
+    });
+
+    const list = await withAdminKey(request(app).get('/admin/api/shops'));
+    expect(list.status).toBe(200);
+    expect(list.body.shops).toEqual([
+      { shopDomain: 'admin-test.myshopify.com', plan: 'metered', creditBalance: 10, verifiedEmail: 'admin@example.com' },
+    ]);
+
+    const grant = await withAdminKey(request(app).post('/admin/api/shops/admin-test.myshopify.com/credits')).send({ amount: 100 });
+    expect(grant.status).toBe(200);
+    expect(grant.body).toEqual({ shopDomain: 'admin-test.myshopify.com', creditBalance: 110 });
+
+    const missing = await withAdminKey(request(app).post('/admin/api/shops/no-such-shop.myshopify.com/credits')).send({ amount: 100 });
+    expect(missing.status).toBe(404);
+
+    const invalid = await withAdminKey(request(app).post('/admin/api/shops/admin-test.myshopify.com/credits')).send({ amount: 0 });
+    expect(invalid.status).toBe(400);
+  });
+
   it('returns its own 404 for an unmatched /admin/api path, rather than falling through to the admin SPA', async () => {
     const { app } = buildTestApp();
     const res = await withAdminKey(request(app).get('/admin/api/not-a-real-route'));

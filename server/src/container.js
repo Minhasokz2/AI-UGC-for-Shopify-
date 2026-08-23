@@ -118,6 +118,7 @@ function buildDependencies({
 
   return {
     db,
+    FieldValue,
     jobsRepo,
     batchesRepo,
     templatesRepo,

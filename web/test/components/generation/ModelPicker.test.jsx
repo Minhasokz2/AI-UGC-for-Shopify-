@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { AppProvider } from '@shopify/polaris';
 import { ModelPicker } from '../../../src/components/generation/ModelPicker.jsx';
 
@@ -15,13 +15,18 @@ function renderPicker(props = {}) {
   );
 }
 
+function getOptionLabels() {
+  return screen.getAllByRole('option').map((option) => option.textContent);
+}
+
 describe('ModelPicker', () => {
-  it('shows every returned model when excludeCategories is not passed', () => {
+  it('renders one dropdown option per returned model when excludeCategories is not passed', () => {
     mockModels = { data: { models: [{ id: 'a', label: 'Scene model', category: 'scene', creditCost: 2 }, { id: 'b', label: 'Video model', category: 'video', creditCost: 16 }] }, isLoading: false, isError: false };
     renderPicker();
 
-    expect(screen.getByText('Scene model')).toBeInTheDocument();
-    expect(screen.getByText('Video model')).toBeInTheDocument();
+    const labels = getOptionLabels();
+    expect(labels).toContain('Scene model (2 credits)');
+    expect(labels).toContain('Video model (16 credits)');
   });
 
   it('filters out categories in excludeCategories — regression for Custom Prompt Studio showing video/try_on/background_removal models it can\'t actually run', () => {
@@ -39,9 +44,20 @@ describe('ModelPicker', () => {
     };
     renderPicker({ excludeCategories: ['background_removal', 'video', 'try_on'] });
 
-    expect(screen.getByText('Scene model')).toBeInTheDocument();
-    expect(screen.queryByText('Video model')).not.toBeInTheDocument();
-    expect(screen.queryByText('Try-on model')).not.toBeInTheDocument();
-    expect(screen.queryByText('Background removal')).not.toBeInTheDocument();
+    const labels = getOptionLabels();
+    expect(labels).toContain('Scene model (2 credits)');
+    expect(labels.some((label) => label.startsWith('Video model'))).toBe(false);
+    expect(labels.some((label) => label.startsWith('Try-on model'))).toBe(false);
+    expect(labels.some((label) => label.startsWith('Background removal'))).toBe(false);
+  });
+
+  it('selecting an option calls onSelect with the matching model, and shows its credit cost', () => {
+    mockModels = { data: { models: [{ id: 'a', label: 'Scene model', category: 'scene', creditCost: 2 }] }, isLoading: false, isError: false };
+    const onSelect = vi.fn();
+    renderPicker({ onSelect, selectedModelId: 'a' });
+
+    expect(screen.getByText('2 credits per generation')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Choose a model'), { target: { value: 'a' } });
+    expect(onSelect).toHaveBeenCalledWith({ id: 'a', label: 'Scene model', category: 'scene', creditCost: 2 });
   });
 });

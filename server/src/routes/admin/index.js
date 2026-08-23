@@ -10,6 +10,7 @@ const { createSeedModelsRouter } = require('./seedModels');
 const { createPricingConfigRouter } = require('./pricingConfig');
 const { createMarginRouter } = require('./margin');
 const { createSweepsRouter } = require('./sweeps');
+const { createAdminShopsRouter } = require('./shops');
 
 /**
  * @param {object} deps every repo/service the sub-routers need.
@@ -23,6 +24,7 @@ function createAdminApiRouter(deps) {
   router.use('/pricing-config', createPricingConfigRouter(deps));
   router.use('/margin', createMarginRouter(deps));
   router.use('/sweep', createSweepsRouter(deps));
+  router.use('/shops', createAdminShopsRouter(deps));
 
   router.use((req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Not found' } });

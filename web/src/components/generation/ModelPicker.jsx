@@ -1,11 +1,19 @@
-import { BlockStack, Text, InlineGrid, Button, Card } from '@shopify/polaris';
+import { BlockStack, Text, Select } from '@shopify/polaris';
 import { useModels } from '../../hooks/useModels.js';
 import { LoadingState } from '../feedback/LoadingState.jsx';
 import { ErrorState } from '../feedback/ErrorState.jsx';
 
+function creditLabel(creditCost) {
+  return `${creditCost} credit${creditCost === 1 ? '' : 's'}`;
+}
+
 /**
  * Renders first and is the ONLY enabled control until a model is chosen —
  * callers must not mount the image-attach UI before selectedModel exists.
+ *
+ * A single dropdown rather than a card grid — the catalog runs well past a
+ * dozen models, which made the old one-card-per-model grid the tallest
+ * section on every generation page.
  *
  * `excludeCategories` filters client-side after the fetch — `eligibleFlow`
  * alone isn't a sufficient filter for e.g. Custom Prompt Studio, since
@@ -21,32 +29,26 @@ export function ModelPicker({ category, eligibleFlow, excludeCategories, selecte
   if (isError) return <ErrorState error={error} title="Couldn't load models" />;
 
   const models = (data?.models ?? []).filter((model) => !excludeCategories?.includes(model.category));
+  const selectedModel = models.find((model) => model.id === selectedModelId);
+
+  const options = [
+    { label: 'Select a model…', value: '' },
+    ...models.map((model) => ({ label: `${model.label} (${creditLabel(model.creditCost)})`, value: model.id })),
+  ];
+
+  function handleChange(value) {
+    const model = models.find((m) => m.id === value);
+    if (model) onSelect(model);
+  }
 
   return (
-    <BlockStack gap="300">
-      <Text as="h3" variant="headingSm">
-        Choose a model
-      </Text>
-      <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="300">
-        {models.map((model) => (
-          <Card key={model.id} background={model.id === selectedModelId ? 'bg-surface-selected' : undefined}>
-            <BlockStack gap="200">
-              <Text as="span" fontWeight="semibold">
-                {model.label}
-              </Text>
-              <Text as="span" tone="subdued">
-                {model.creditCost} credits
-              </Text>
-              <Button
-                pressed={model.id === selectedModelId}
-                onClick={() => onSelect(model)}
-              >
-                {model.id === selectedModelId ? 'Selected' : 'Select'}
-              </Button>
-            </BlockStack>
-          </Card>
-        ))}
-      </InlineGrid>
+    <BlockStack gap="200">
+      <Select label="Choose a model" options={options} value={selectedModelId ?? ''} onChange={handleChange} />
+      {selectedModel && (
+        <Text as="span" tone="subdued">
+          {creditLabel(selectedModel.creditCost)} per generation
+        </Text>
+      )}
     </BlockStack>
   );
 }
