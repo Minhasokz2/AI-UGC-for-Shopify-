@@ -35,14 +35,15 @@ describe('services/billingReconciliation', () => {
       expect(result).toEqual({ shopDomain: 'shop-a.myshopify.com', granted: 0, skipped: true, reason: 'no_session' });
     });
 
-    it('grants a pack renewal for an item whose handle matches a configured plan', async () => {
+    it('grants a pack\'s MONTHLY renewal for an item whose handle matches a configured plan and billingPeriod is EVERY_30_DAYS', async () => {
       const growth = CREDIT_PACKS.find((p) => p.id === 'growth');
-      const growthHandle = 'growth-monthly-handle';
-      const originalHandle = PLAN_HANDLES.growth.monthly;
-      PLAN_HANDLES.growth.monthly = growthHandle;
+      const growthHandle = 'growth-handle';
+      const original = PLAN_HANDLES.growth;
+      PLAN_HANDLES.growth = growthHandle;
       try {
         const partnerApiClient = {
           getActiveSubscription: vi.fn().mockResolvedValue({
+            billingPeriod: 'EVERY_30_DAYS',
             currentBillingCycle: { startTime: '2026-02-01T00:00:00Z' },
             items: [{ handle: growthHandle }],
           }),
@@ -63,17 +64,50 @@ describe('services/billingReconciliation', () => {
         });
         expect(result).toEqual({ shopDomain: 'shop-a.myshopify.com', granted: 1, skipped: false });
       } finally {
-        PLAN_HANDLES.growth.monthly = originalHandle;
+        PLAN_HANDLES.growth = original;
+      }
+    });
+
+    it('grants a pack\'s ANNUAL renewal when billingPeriod is ANNUAL — same handle as monthly', async () => {
+      const growth = CREDIT_PACKS.find((p) => p.id === 'growth');
+      const growthHandle = 'growth-handle';
+      const original = PLAN_HANDLES.growth;
+      PLAN_HANDLES.growth = growthHandle;
+      try {
+        const partnerApiClient = {
+          getActiveSubscription: vi.fn().mockResolvedValue({
+            billingPeriod: 'ANNUAL',
+            currentBillingCycle: { startTime: '2026-02-01T00:00:00Z' },
+            items: [{ handle: growthHandle }],
+          }),
+        };
+        const billingService = {
+          grantCreditsForCharge: vi.fn().mockResolvedValue({ granted: true }),
+          activateUnlimitedPlan: vi.fn(),
+          deactivateUnlimitedPlan: vi.fn(),
+        };
+        const reconciliation = createBillingReconciliation(makeDeps({ partnerApiClient, billingService }));
+
+        await reconciliation.reconcileShop({ shopDomain: 'shop-a.myshopify.com', plan: 'metered' });
+
+        expect(billingService.grantCreditsForCharge).toHaveBeenCalledWith('shop-a.myshopify.com', {
+          chargeKey: `app-pricing:${growthHandle}:2026-02-01T00:00:00Z`,
+          credits: growth.annualCredits,
+          type: 'renewal',
+        });
+      } finally {
+        PLAN_HANDLES.growth = original;
       }
     });
 
     it('activates the Unlimited plan for a matching item, without granting credits', async () => {
       const unlimitedHandle = 'unlimited-handle';
-      const originalHandle = PLAN_HANDLES.unlimited.monthly;
-      PLAN_HANDLES.unlimited.monthly = unlimitedHandle;
+      const original = PLAN_HANDLES.unlimited;
+      PLAN_HANDLES.unlimited = unlimitedHandle;
       try {
         const partnerApiClient = {
           getActiveSubscription: vi.fn().mockResolvedValue({
+            billingPeriod: 'EVERY_30_DAYS',
             currentBillingCycle: { startTime: '2026-02-01T00:00:00Z' },
             items: [{ handle: unlimitedHandle }],
           }),
@@ -91,7 +125,7 @@ describe('services/billingReconciliation', () => {
         expect(billingService.grantCreditsForCharge).not.toHaveBeenCalled();
         expect(result.granted).toBe(0);
       } finally {
-        PLAN_HANDLES.unlimited.monthly = originalHandle;
+        PLAN_HANDLES.unlimited = original;
       }
     });
 

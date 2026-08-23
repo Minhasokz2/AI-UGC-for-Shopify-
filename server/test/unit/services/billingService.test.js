@@ -41,9 +41,9 @@ describe('services/billingService', () => {
     });
 
     it('returns confirmed:false when the Partner API reports no active subscription — never trusts the client-supplied plan_handle alone', async () => {
-      const growthHandle = 'growth-monthly-handle';
-      const originalHandle = PLAN_HANDLES.growth.monthly;
-      PLAN_HANDLES.growth.monthly = growthHandle;
+      const growthHandle = 'growth-handle';
+      const original = PLAN_HANDLES.growth;
+      PLAN_HANDLES.growth = growthHandle;
       try {
         const partnerApiClient = { getActiveSubscription: vi.fn().mockResolvedValue(null) };
         const service = createBillingService(makeDeps({ partnerApiClient }));
@@ -52,17 +52,18 @@ describe('services/billingService', () => {
 
         expect(result).toEqual({ confirmed: false, reason: 'no_matching_active_subscription' });
       } finally {
-        PLAN_HANDLES.growth.monthly = originalHandle;
+        PLAN_HANDLES.growth = original;
       }
     });
 
     it('returns confirmed:false when the active subscription\'s items don\'t include the claimed handle', async () => {
-      const growthHandle = 'growth-monthly-handle';
-      const originalHandle = PLAN_HANDLES.growth.monthly;
-      PLAN_HANDLES.growth.monthly = growthHandle;
+      const growthHandle = 'growth-handle';
+      const original = PLAN_HANDLES.growth;
+      PLAN_HANDLES.growth = growthHandle;
       try {
         const partnerApiClient = {
           getActiveSubscription: vi.fn().mockResolvedValue({
+            billingPeriod: 'EVERY_30_DAYS',
             currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
             items: [{ handle: 'some-other-handle' }],
           }),
@@ -73,18 +74,19 @@ describe('services/billingService', () => {
 
         expect(result).toEqual({ confirmed: false, reason: 'no_matching_active_subscription' });
       } finally {
-        PLAN_HANDLES.growth.monthly = originalHandle;
+        PLAN_HANDLES.growth = original;
       }
     });
 
-    it('grants the pack\'s credits once the Partner API confirms a matching active subscription', async () => {
+    it('grants the pack\'s MONTHLY credits when billingPeriod is EVERY_30_DAYS', async () => {
       const growth = CREDIT_PACKS.find((p) => p.id === 'growth');
-      const growthHandle = 'growth-monthly-handle';
-      const originalHandle = PLAN_HANDLES.growth.monthly;
-      PLAN_HANDLES.growth.monthly = growthHandle;
+      const growthHandle = 'growth-handle';
+      const original = PLAN_HANDLES.growth;
+      PLAN_HANDLES.growth = growthHandle;
       try {
         const partnerApiClient = {
           getActiveSubscription: vi.fn().mockResolvedValue({
+            billingPeriod: 'EVERY_30_DAYS',
             currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
             items: [{ handle: growthHandle }],
           }),
@@ -102,17 +104,45 @@ describe('services/billingService', () => {
         );
         expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a.myshopify.com', { creditBalance: expect.anything() });
       } finally {
-        PLAN_HANDLES.growth.monthly = originalHandle;
+        PLAN_HANDLES.growth = original;
+      }
+    });
+
+    it('grants the pack\'s ANNUAL credits when billingPeriod is ANNUAL — same handle as monthly, period comes from billingPeriod not the handle', async () => {
+      const growth = CREDIT_PACKS.find((p) => p.id === 'growth');
+      const growthHandle = 'growth-handle';
+      const original = PLAN_HANDLES.growth;
+      PLAN_HANDLES.growth = growthHandle;
+      try {
+        const partnerApiClient = {
+          getActiveSubscription: vi.fn().mockResolvedValue({
+            billingPeriod: 'ANNUAL',
+            currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
+            items: [{ handle: growthHandle }],
+          }),
+        };
+        const billingChargesRepo = { claimCharge: vi.fn().mockResolvedValue({ claimed: true }) };
+        const service = createBillingService(makeDeps({ partnerApiClient, billingChargesRepo }));
+
+        await service.confirmAppPricingPlan({}, { shopDomain: 'shop-a.myshopify.com', planHandle: growthHandle });
+
+        expect(billingChargesRepo.claimCharge).toHaveBeenCalledWith(
+          expect.any(String),
+          { shopDomain: 'shop-a.myshopify.com', credits: growth.annualCredits, type: 'subscription' },
+        );
+      } finally {
+        PLAN_HANDLES.growth = original;
       }
     });
 
     it('is idempotent — confirming the same billing cycle twice grants credits only once', async () => {
-      const growthHandle = 'growth-monthly-handle';
-      const originalHandle = PLAN_HANDLES.growth.monthly;
-      PLAN_HANDLES.growth.monthly = growthHandle;
+      const growthHandle = 'growth-handle';
+      const original = PLAN_HANDLES.growth;
+      PLAN_HANDLES.growth = growthHandle;
       try {
         const partnerApiClient = {
           getActiveSubscription: vi.fn().mockResolvedValue({
+            billingPeriod: 'EVERY_30_DAYS',
             currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
             items: [{ handle: growthHandle }],
           }),
@@ -133,17 +163,18 @@ describe('services/billingService', () => {
         expect(first).toEqual({ confirmed: true, granted: true });
         expect(second).toEqual({ confirmed: true, granted: false });
       } finally {
-        PLAN_HANDLES.growth.monthly = originalHandle;
+        PLAN_HANDLES.growth = original;
       }
     });
 
-    it('activates the Unlimited plan (no credit grant) once confirmed', async () => {
+    it('activates the Unlimited plan (no credit grant) once confirmed, regardless of billing period', async () => {
       const unlimitedHandle = 'unlimited-handle';
-      const originalHandle = PLAN_HANDLES.unlimited.monthly;
-      PLAN_HANDLES.unlimited.monthly = unlimitedHandle;
+      const original = PLAN_HANDLES.unlimited;
+      PLAN_HANDLES.unlimited = unlimitedHandle;
       try {
         const partnerApiClient = {
           getActiveSubscription: vi.fn().mockResolvedValue({
+            billingPeriod: 'ANNUAL',
             currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
             items: [{ handle: unlimitedHandle }],
           }),
@@ -156,7 +187,7 @@ describe('services/billingService', () => {
         expect(result).toEqual({ confirmed: true, plan: 'unlimited' });
         expect(shopsRepo.updateShop).toHaveBeenCalledWith('shop-a.myshopify.com', { plan: 'unlimited', unlimitedPlanHandle: unlimitedHandle });
       } finally {
-        PLAN_HANDLES.unlimited.monthly = originalHandle;
+        PLAN_HANDLES.unlimited = original;
       }
     });
   });

@@ -43,15 +43,16 @@ describe('integration: /api/billing', () => {
   });
 
   describe('POST /confirm-app-pricing-plan', () => {
-    it('grants a pack subscription\'s credits exactly once, verified via the Partner API', async () => {
+    it('grants a pack subscription\'s MONTHLY credits exactly once, verified via the Partner API', async () => {
       const growth = CREDIT_PACKS.find((p) => p.id === 'growth');
-      const growthHandle = 'growth-monthly-handle';
-      const originalGrowthHandle = PLAN_HANDLES.growth.monthly;
-      PLAN_HANDLES.growth.monthly = growthHandle;
+      const growthHandle = 'growth-handle';
+      const originalGrowthHandle = PLAN_HANDLES.growth;
+      PLAN_HANDLES.growth = growthHandle;
       try {
         const shopify = createFakeShopify({ graphqlHandler: graphqlHandlerForIds() });
         const partnerApiClient = {
           getActiveSubscription: async () => ({
+            billingPeriod: 'EVERY_30_DAYS',
             currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
             items: [{ handle: growthHandle }],
           }),
@@ -69,18 +70,46 @@ describe('integration: /api/billing', () => {
         const shop = (await db.collection('shops').doc(SHOP).get()).data();
         expect(shop.creditBalance).toBe(growth.monthlyCredits);
       } finally {
-        PLAN_HANDLES.growth.monthly = originalGrowthHandle;
+        PLAN_HANDLES.growth = originalGrowthHandle;
+      }
+    });
+
+    it('grants a pack subscription\'s ANNUAL credits when billingPeriod is ANNUAL — same handle as monthly', async () => {
+      const growth = CREDIT_PACKS.find((p) => p.id === 'growth');
+      const growthHandle = 'growth-handle';
+      const originalGrowthHandle = PLAN_HANDLES.growth;
+      PLAN_HANDLES.growth = growthHandle;
+      try {
+        const shopify = createFakeShopify({ graphqlHandler: graphqlHandlerForIds() });
+        const partnerApiClient = {
+          getActiveSubscription: async () => ({
+            billingPeriod: 'ANNUAL',
+            currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
+            items: [{ handle: growthHandle }],
+          }),
+        };
+        const { app, db } = buildTestApp({ shopify, partnerApiClient });
+        await db.collection('shops').doc(SHOP).set({ shopDomain: SHOP, creditBalance: 0 });
+
+        const res = await request(app).post('/api/billing/confirm-app-pricing-plan').send({ planHandle: growthHandle });
+
+        expect(res.body).toEqual({ confirmed: true, granted: true });
+        const shop = (await db.collection('shops').doc(SHOP).get()).data();
+        expect(shop.creditBalance).toBe(growth.annualCredits);
+      } finally {
+        PLAN_HANDLES.growth = originalGrowthHandle;
       }
     });
 
     it('activates the Unlimited plan once confirmed', async () => {
       const unlimitedHandle = 'unlimited-handle';
-      const originalUnlimitedHandle = PLAN_HANDLES.unlimited.monthly;
-      PLAN_HANDLES.unlimited.monthly = unlimitedHandle;
+      const originalUnlimitedHandle = PLAN_HANDLES.unlimited;
+      PLAN_HANDLES.unlimited = unlimitedHandle;
       try {
         const shopify = createFakeShopify({ graphqlHandler: graphqlHandlerForIds() });
         const partnerApiClient = {
           getActiveSubscription: async () => ({
+            billingPeriod: 'EVERY_30_DAYS',
             currentBillingCycle: { startTime: '2026-01-01T00:00:00Z' },
             items: [{ handle: unlimitedHandle }],
           }),
@@ -95,14 +124,14 @@ describe('integration: /api/billing', () => {
         const shop = (await db.collection('shops').doc(SHOP).get()).data();
         expect(shop.plan).toBe('unlimited');
       } finally {
-        PLAN_HANDLES.unlimited.monthly = originalUnlimitedHandle;
+        PLAN_HANDLES.unlimited = originalUnlimitedHandle;
       }
     });
 
     it('reports confirmed:false — and grants nothing — when the Partner API shows no matching active subscription', async () => {
-      const growthHandle = 'growth-monthly-handle';
-      const originalGrowthHandle = PLAN_HANDLES.growth.monthly;
-      PLAN_HANDLES.growth.monthly = growthHandle;
+      const growthHandle = 'growth-handle';
+      const originalGrowthHandle = PLAN_HANDLES.growth;
+      PLAN_HANDLES.growth = growthHandle;
       try {
         const shopify = createFakeShopify({ graphqlHandler: graphqlHandlerForIds() });
         const { app, db } = buildTestApp({ shopify, partnerApiClient: { getActiveSubscription: async () => null } });
@@ -115,7 +144,7 @@ describe('integration: /api/billing', () => {
         const shop = (await db.collection('shops').doc(SHOP).get()).data();
         expect(shop.creditBalance).toBe(0);
       } finally {
-        PLAN_HANDLES.growth.monthly = originalGrowthHandle;
+        PLAN_HANDLES.growth = originalGrowthHandle;
       }
     });
   });

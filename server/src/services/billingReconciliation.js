@@ -19,6 +19,10 @@
 // once before the next renewal) a no-op instead of a double-grant. A shop
 // locally recorded as 'unlimited' with no matching active subscription
 // anymore is reverted to metered billing.
+//
+// Each pack is ONE plan/handle offering both monthly and annual billing —
+// subscription.billingPeriod ('ANNUAL' | 'EVERY_30_DAYS'), not the handle,
+// decides which credit amount to grant.
 
 const { resolvePlanFromHandle } = require('../config/appPricingPlans');
 const { CREDIT_PACKS } = require('./billingPacks');
@@ -79,7 +83,7 @@ function createBillingReconciliation({ shopsRepo, billingService, getGraphqlClie
       }
 
       const pack = CREDIT_PACKS.find((p) => p.id === resolved.packId);
-      const credits = resolved.period === 'annual' ? pack.annualCredits : pack.monthlyCredits;
+      const credits = subscription.billingPeriod === 'ANNUAL' ? pack.annualCredits : pack.monthlyCredits;
       // eslint-disable-next-line no-await-in-loop
       const result = await billingService.grantCreditsForCharge(shopDomain, { chargeKey, credits, type: 'renewal' });
       if (result.granted) granted += 1;

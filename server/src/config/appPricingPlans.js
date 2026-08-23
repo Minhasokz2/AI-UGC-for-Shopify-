@@ -1,30 +1,33 @@
-// Shopify App Pricing plan handles. Shopify assigns (or lets you confirm) a
-// `plan_handle` per plan when you create it in Partner Dashboard > your app >
-// Distribution > Manage listing > Pricing content > Manage. Open each plan's
-// settings there to find its exact handle, then fill it in below — this file
-// is the single place the returnUrl's `plan_handle` query param (and the
-// Partner API's activeSubscription.items[].handle) gets mapped back to one of
-// this app's own credit packs. Leave a value `null` if that plan/period
-// doesn't exist yet in Shopify App Pricing; the pricing table only offers a
-// pack/period once its handle is filled in here.
+// Shopify App Pricing plan handles. Each of this app's 4 plans is ONE plan in
+// Partner Dashboard ("Monthly recurring, with yearly discount" billing type)
+// covering BOTH periods — there is no separate annual plan/handle. Which
+// period a merchant actually picked comes back on the Partner API's
+// activeSubscription.billingPeriod field ('ANNUAL' | 'EVERY_30_DAYS'), NOT
+// from the handle — see billingService.confirmAppPricingPlan and
+// billingReconciliation.reconcileShop, which read that field to choose
+// monthly vs annual credits.
+//
+// Fill in / update a value here to match the exact `plan_handle` shown when
+// you create or edit the plan in Partner Dashboard > your app > Distribution
+// > Manage listing > Pricing content > Manage. Leave a value `null` if that
+// plan doesn't exist yet in Shopify App Pricing; the pricing table only
+// offers a pack once its handle is filled in here.
 const PLAN_HANDLES = {
-  starter: { monthly: 'starter', annual: null },
-  growth: { monthly: 'growth', annual: null },
-  scale: { monthly: 'scale-monthly', annual: null },
-  unlimited: { monthly: 'unlimited-monthly' },
+  starter: 'starter',
+  growth: 'growth',
+  scale: 'scale-monthly',
+  unlimited: 'unlimited-monthly',
 };
 
 /**
  * @param {string} planHandle
- * @returns {{ packId: string, period: 'monthly'|'annual' }|{ unlimited: true }|null}
+ * @returns {{ packId: string }|{ unlimited: true }|null}
  */
 function resolvePlanFromHandle(planHandle) {
   if (!planHandle) return null;
-  if (PLAN_HANDLES.unlimited.monthly === planHandle) return { unlimited: true };
+  if (PLAN_HANDLES.unlimited === planHandle) return { unlimited: true };
   for (const packId of ['starter', 'growth', 'scale']) {
-    for (const period of ['monthly', 'annual']) {
-      if (PLAN_HANDLES[packId][period] === planHandle) return { packId, period };
-    }
+    if (PLAN_HANDLES[packId] === planHandle) return { packId };
   }
   return null;
 }

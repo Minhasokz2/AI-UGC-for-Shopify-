@@ -27,6 +27,12 @@
 // by `app-pricing:${planHandle}:${currentBillingCycle.startTime}` so the same
 // billing cycle is never credited twice but a NEW cycle (a fresh startTime)
 // grants again.
+//
+// Each pack is ONE Shopify App Pricing plan (one handle) offering BOTH
+// monthly and annual billing ("Monthly recurring, with yearly discount") —
+// there's no separate annual handle. Which period a merchant actually chose
+// comes from activeSubscription.billingPeriod ('ANNUAL' | 'EVERY_30_DAYS'),
+// never from the handle.
 
 const { CREDIT_PACKS, UNLIMITED_PLAN } = require('./billingPacks');
 const { resolvePlanFromHandle } = require('../config/appPricingPlans');
@@ -79,7 +85,7 @@ function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient,
     }
 
     const pack = CREDIT_PACKS.find((p) => p.id === resolved.packId);
-    const credits = resolved.period === 'annual' ? pack.annualCredits : pack.monthlyCredits;
+    const credits = subscription.billingPeriod === 'ANNUAL' ? pack.annualCredits : pack.monthlyCredits;
     const result = await grantCreditsForCharge(shopDomain, { chargeKey, credits, type: 'subscription' });
     return { confirmed: true, ...result };
   }
