@@ -54,6 +54,15 @@ const schema = z
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1),
     GOOGLE_OAUTH_REDIRECT_URI: z.string().url(),
 
+    // Billing: whether appSubscriptionCreate/appPurchaseOneTimeCreate ask Shopify
+    // for a TEST charge. Deliberately its OWN explicit flag, never inferred from
+    // NODE_ENV — this server is "production" hosting regardless of whether the
+    // shop currently testing against it is a real merchant or a Partner dev
+    // store, and Shopify hard-rejects a real (test:false) charge against a dev
+    // store. Defaults to true (never a real charge) until explicitly set to
+    // "false" once ready to accept real payments from real merchants.
+    BILLING_TEST_MODE: z.enum(['true', 'false']).default('true'),
+
     // Worker / runtime tuning
     JOB_WORKER_PER_SHOP_CONCURRENCY: z.coerce.number().default(20),
     JOB_WORKER_GLOBAL_CONCURRENCY: z.coerce.number().default(40),

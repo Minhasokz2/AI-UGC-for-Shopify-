@@ -13,18 +13,9 @@ function makeDeps(overrides = {}) {
     shopsRepo: { updateShop: vi.fn().mockResolvedValue(undefined) },
     billingChargesRepo: { claimCharge: vi.fn().mockResolvedValue({ claimed: true }) },
     getGraphqlClient: vi.fn(),
+    isTestCharge: true,
     FieldValue,
     ...overrides,
-  };
-}
-
-/** A client whose FIRST request (the shop-plan check) resolves partnerDevelopment, then the mutation. */
-function makeClient({ partnerDevelopment, mutationResponse }) {
-  return {
-    request: vi
-      .fn()
-      .mockResolvedValueOnce({ data: { shop: { plan: { partnerDevelopment } } } })
-      .mockResolvedValueOnce(mutationResponse),
   };
 }
 
@@ -67,9 +58,8 @@ describe('services/billingService', () => {
     });
 
     it('calls appSubscriptionCreate and returns the confirmationUrl/subscriptionId on success', async () => {
-      const client = makeClient({
-        partnerDevelopment: false,
-        mutationResponse: {
+      const client = {
+        request: vi.fn().mockResolvedValue({
           data: {
             appSubscriptionCreate: {
               appSubscription: { id: 'gid://shopify/AppSubscription/1' },
@@ -77,14 +67,13 @@ describe('services/billingService', () => {
               userErrors: [],
             },
           },
-        },
-      });
+        }),
+      };
       const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
 
       const result = await service.createPackSubscription({ shop: 's' }, { packId: 'starter', returnUrl: 'https://x/return' });
 
-      expect(client.request).toHaveBeenNthCalledWith(
-        2,
+      expect(client.request).toHaveBeenCalledWith(
         expect.stringContaining('appSubscriptionCreate'),
         expect.objectContaining({ variables: expect.objectContaining({ returnUrl: 'https://x/return' }) }),
       );
@@ -96,27 +85,25 @@ describe('services/billingService', () => {
       );
     });
 
-    it('passes test:true when the connected shop is a Partner development store, regardless of server NODE_ENV', async () => {
-      const client = makeClient({
-        partnerDevelopment: true,
-        mutationResponse: {
+    it('passes the injected isTestCharge flag straight through as the mutation\'s test variable', async () => {
+      const client = {
+        request: vi.fn().mockResolvedValue({
           data: { appSubscriptionCreate: { appSubscription: { id: 'gid://x/1' }, confirmationUrl: 'https://x', userErrors: [] } },
-        },
-      });
-      const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
+        }),
+      };
+      const service = createBillingService(makeDeps({ getGraphqlClient: () => client, isTestCharge: true }));
 
       await service.createPackSubscription({ shop: 's' }, { packId: 'starter', returnUrl: 'https://x/return' });
 
-      expect(client.request).toHaveBeenNthCalledWith(2, expect.anything(), expect.objectContaining({ variables: expect.objectContaining({ test: true }) }));
+      expect(client.request).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ variables: expect.objectContaining({ test: true }) }));
     });
 
     it('throws PublishError when the mutation returns userErrors', async () => {
-      const client = makeClient({
-        partnerDevelopment: false,
-        mutationResponse: {
+      const client = {
+        request: vi.fn().mockResolvedValue({
           data: { appSubscriptionCreate: { appSubscription: null, confirmationUrl: null, userErrors: [{ field: [], message: 'Invalid plan' }] } },
-        },
-      });
+        }),
+      };
       const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
 
       await expect(
@@ -127,9 +114,8 @@ describe('services/billingService', () => {
 
   describe('createUnlimitedSubscription', () => {
     it('calls appSubscriptionCreate for the flat-rate plan', async () => {
-      const client = makeClient({
-        partnerDevelopment: false,
-        mutationResponse: {
+      const client = {
+        request: vi.fn().mockResolvedValue({
           data: {
             appSubscriptionCreate: {
               appSubscription: { id: 'gid://shopify/AppSubscription/2' },
@@ -137,8 +123,8 @@ describe('services/billingService', () => {
               userErrors: [],
             },
           },
-        },
-      });
+        }),
+      };
       const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
 
       const result = await service.createUnlimitedSubscription({ shop: 's' }, { returnUrl: 'https://x/return' });
@@ -149,9 +135,8 @@ describe('services/billingService', () => {
 
   describe('createCustomPurchase', () => {
     it('calls appPurchaseOneTimeCreate and returns the confirmationUrl/purchaseId', async () => {
-      const client = makeClient({
-        partnerDevelopment: false,
-        mutationResponse: {
+      const client = {
+        request: vi.fn().mockResolvedValue({
           data: {
             appPurchaseOneTimeCreate: {
               appPurchaseOneTime: { id: 'gid://shopify/AppPurchaseOneTime/1' },
@@ -159,8 +144,8 @@ describe('services/billingService', () => {
               userErrors: [],
             },
           },
-        },
-      });
+        }),
+      };
       const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
 
       const result = await service.createCustomPurchase({ shop: 's' }, { amountCents: 1000, returnUrl: 'https://x/return' });
@@ -171,12 +156,11 @@ describe('services/billingService', () => {
     });
 
     it('throws PublishError on userErrors', async () => {
-      const client = makeClient({
-        partnerDevelopment: false,
-        mutationResponse: {
+      const client = {
+        request: vi.fn().mockResolvedValue({
           data: { appPurchaseOneTimeCreate: { appPurchaseOneTime: null, confirmationUrl: null, userErrors: [{ field: [], message: 'Amount too low' }] } },
-        },
-      });
+        }),
+      };
       const service = createBillingService(makeDeps({ getGraphqlClient: () => client }));
 
       await expect(

@@ -85,6 +85,7 @@ function buildDependencies({
     shopsRepo,
     billingChargesRepo,
     getGraphqlClient,
+    isTestCharge: env.BILLING_TEST_MODE === 'true',
     FieldValue,
   });
   const billingReconciliation = createBillingReconciliation({

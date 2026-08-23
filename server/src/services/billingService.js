@@ -39,20 +39,6 @@ const APP_PURCHASE_ONE_TIME_CREATE_MUTATION = `#graphql
   }
 `;
 
-// Shopify rejects a REAL (non-test) charge outright against a Partner
-// development store — "test" here must reflect the CONNECTED SHOP, never the
-// server's own NODE_ENV. A live, production-hosted server is routinely used
-// to test against dev stores (this is exactly that case), so tying it to
-// server environment produces a hard 403 on every dev-store subscribe
-// attempt while never actually testing the real-charge path either.
-const SHOP_PLAN_QUERY = `#graphql
-  query shopPlan {
-    shop {
-      plan { partnerDevelopment }
-    }
-  }
-`;
-
 /**
  * @param {{ id: string, label: string }} pack
  * @param {'monthly'|'annual'} period
@@ -111,24 +97,13 @@ function extractUserErrors(payload) {
 }
 
 /**
- * @param {{ shopsRepo: object, billingChargesRepo: object, getGraphqlClient: Function, FieldValue: object }} deps
+ * @param {{ shopsRepo: object, billingChargesRepo: object, getGraphqlClient: Function, isTestCharge: boolean, FieldValue: object }} deps
  */
-function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient, FieldValue }) {
+function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient, isTestCharge, FieldValue }) {
   async function request(session, mutation, variables) {
     const client = getGraphqlClient(session);
     const response = await client.request(mutation, { variables });
     return response.data;
-  }
-
-  /**
-   * Whether the CONNECTED SHOP is a Shopify Partner development store —
-   * Shopify's Billing API hard-rejects a real (test:false) charge against
-   * one, so this is checked fresh per request rather than assumed from
-   * server config.
-   */
-  async function isTestShop(session) {
-    const data = await request(session, SHOP_PLAN_QUERY, {});
-    return Boolean(data?.shop?.plan?.partnerDevelopment);
   }
 
   /**
@@ -139,8 +114,7 @@ function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient,
     const pack = CREDIT_PACKS.find((p) => p.id === packId);
     if (!pack) throw new ValidationError(`Unknown credit pack "${packId}"`);
 
-    const test = await isTestShop(session);
-    const input = buildSubscriptionInput(pack, period, { returnUrl, test });
+    const input = buildSubscriptionInput(pack, period, { returnUrl, test: isTestCharge });
     const data = await request(session, APP_SUBSCRIPTION_CREATE_MUTATION, input);
     const userErrors = extractUserErrors(data?.appSubscriptionCreate);
     if (userErrors.length > 0) {
@@ -156,8 +130,7 @@ function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient,
 
   /** Starts the flat-rate Unlimited plan subscription. */
   async function createUnlimitedSubscription(session, { returnUrl }) {
-    const test = await isTestShop(session);
-    const input = buildUnlimitedSubscriptionInput({ returnUrl, test });
+    const input = buildUnlimitedSubscriptionInput({ returnUrl, test: isTestCharge });
     const data = await request(session, APP_SUBSCRIPTION_CREATE_MUTATION, input);
     const userErrors = extractUserErrors(data?.appSubscriptionCreate);
     if (userErrors.length > 0) {
@@ -172,8 +145,7 @@ function createBillingService({ shopsRepo, billingChargesRepo, getGraphqlClient,
   /** Starts a one-time purchase for a custom credit top-up amount. */
   async function createCustomPurchase(session, { amountCents, returnUrl }) {
     computeCreditsForAmount(amountCents); // throws ValidationError below MIN_CUSTOM_PURCHASE_CENTS BEFORE any real charge is created
-    const test = await isTestShop(session);
-    const input = buildOneTimePurchaseInput({ amountCents, returnUrl, test });
+    const input = buildOneTimePurchaseInput({ amountCents, returnUrl, test: isTestCharge });
     const data = await request(session, APP_PURCHASE_ONE_TIME_CREATE_MUTATION, input);
     const userErrors = extractUserErrors(data?.appPurchaseOneTimeCreate);
     if (userErrors.length > 0) {
