@@ -177,6 +177,55 @@ describe('integration: misc authenticated routes', () => {
     expect(stored.size).toBe(1);
   });
 
+  it('POST /api/products/sync paces requests across pages using the GraphQL cost throttle status', async () => {
+    let callCount = 0;
+    const shopify = createFakeShopify({
+      graphqlHandler: async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return {
+            data: {
+              products: {
+                nodes: [{ id: 'gid://shopify/Product/1', title: 'Widget', productType: 'Gadgets', images: { nodes: [] } }],
+                pageInfo: { hasNextPage: true, endCursor: 'cursor-1' },
+              },
+            },
+            extensions: { cost: { throttleStatus: { currentlyAvailable: 1000, restoreRate: 50 } } },
+          };
+        }
+        return {
+          data: {
+            products: {
+              nodes: [{ id: 'gid://shopify/Product/2', title: 'Gizmo', productType: 'Gadgets', images: { nodes: [] } }],
+              pageInfo: { hasNextPage: false, endCursor: null },
+            },
+          },
+        };
+      },
+    });
+    const { app, db } = buildTestApp({ shopify });
+    await seedShop(db);
+
+    const sync = await request(app).post('/api/products/sync');
+
+    expect(sync.status).toBe(200);
+    expect(sync.body.syncedCount).toBe(2);
+    expect(callCount).toBe(2);
+  });
+
+  it('POST /api/products/sync surfaces a clear 502 (not a crash) when Shopify returns a GraphQL error mid-sync', async () => {
+    const shopify = createFakeShopify({
+      graphqlHandler: async () => ({ errors: [{ message: 'Throttled' }] }),
+    });
+    const { app, db } = buildTestApp({ shopify });
+    await seedShop(db);
+
+    const sync = await request(app).post('/api/products/sync');
+
+    expect(sync.status).toBe(502);
+    expect(sync.body.error.code).toBe('SHOPIFY_API_ERROR');
+  });
+
   it('GET /api/usage-stats reflects the shop doc and recent transactions', async () => {
     const { app, db } = buildTestApp();
     await seedShop(db, { lifetimeCreditsSpent: 5, lifetimeImagesGenerated: 2 });

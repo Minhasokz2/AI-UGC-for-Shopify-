@@ -9,6 +9,8 @@
 
 const express = require('express');
 const { wrapAsync } = require('../../middleware/wrapAsync');
+const { ShopifyApiError } = require('../../errors/AppError');
+const { computeThrottleWaitMs } = require('../../services/publishService');
 
 const SYNC_PRODUCTS_QUERY = `#graphql
   query syncProducts($cursor: String) {
@@ -28,6 +30,10 @@ const SYNC_PRODUCTS_QUERY = `#graphql
 
 const MAX_SYNC_PAGES = 20; // hard cap (~1000 products) so a single sync request can't run unbounded
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * @param {{ productsRepo: object, getGraphqlClient: Function }} deps
  */
@@ -44,6 +50,10 @@ function createProductsRouter({ productsRepo, getGraphqlClient }) {
       for (let page = 0; page < MAX_SYNC_PAGES; page += 1) {
         // eslint-disable-next-line no-await-in-loop
         const response = await client.request(SYNC_PRODUCTS_QUERY, { variables: { cursor } });
+        if (response.errors || !response.data?.products) {
+          const message = response.errors?.map((e) => e.message).join('; ') || 'Product sync query failed';
+          throw new ShopifyApiError(`Failed to sync products: ${message}`);
+        }
         const { nodes, pageInfo } = response.data.products;
 
         // eslint-disable-next-line no-await-in-loop
@@ -62,6 +72,14 @@ function createProductsRouter({ productsRepo, getGraphqlClient }) {
 
         if (!pageInfo.hasNextPage) break;
         cursor = pageInfo.endCursor;
+
+        // A large catalog can burn through the GraphQL cost bucket across
+        // several back-to-back pages faster than it restores — without
+        // this, a bigger store's sync gets THROTTLED partway through and
+        // the whole request 500s instead of just the later pages slowing
+        // down. Same pacing helper the bulk-publish path uses.
+        // eslint-disable-next-line no-await-in-loop
+        await sleep(computeThrottleWaitMs(response.extensions?.cost?.throttleStatus));
       }
 
       res.json({ syncedCount });
