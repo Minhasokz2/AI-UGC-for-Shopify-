@@ -1,6 +1,20 @@
 const request = require('supertest');
+const { GraphqlQueryError } = require('@shopify/shopify-api');
 const { buildTestApp, createFakeShopify } = require('../../helpers/buildTestApp');
 const { seedAllowedModels } = require('../../../src/services/allowedModelsSeedData');
+
+function throttledGraphqlError() {
+  return new GraphqlQueryError({
+    message: 'Throttled',
+    response: { status: 200 },
+    body: {
+      errors: { graphQLErrors: [{ message: 'Throttled', extensions: { code: 'THROTTLED' } }] },
+      // A currentlyAvailable this high makes computeThrottleWaitMs return 0 so the retry fires
+      // immediately in tests — production responses carry the store's real (usually much lower) value.
+      extensions: { cost: { throttleStatus: { currentlyAvailable: 1000, restoreRate: 50 } } },
+    },
+  });
+}
 
 const SHOP = 'test-shop.myshopify.com';
 
@@ -213,9 +227,37 @@ describe('integration: misc authenticated routes', () => {
     expect(callCount).toBe(2);
   });
 
-  it('POST /api/products/sync surfaces a clear 502 (not a crash) when Shopify returns a GraphQL error mid-sync', async () => {
+  it('POST /api/products/sync retries once on a THROTTLED GraphqlQueryError and still succeeds', async () => {
+    let callCount = 0;
     const shopify = createFakeShopify({
-      graphqlHandler: async () => ({ errors: [{ message: 'Throttled' }] }),
+      graphqlHandler: async () => {
+        callCount += 1;
+        if (callCount === 1) throw throttledGraphqlError();
+        return {
+          data: {
+            products: {
+              nodes: [{ id: 'gid://shopify/Product/1', title: 'Widget', productType: 'Gadgets', images: { nodes: [] } }],
+              pageInfo: { hasNextPage: false, endCursor: null },
+            },
+          },
+        };
+      },
+    });
+    const { app, db } = buildTestApp({ shopify });
+    await seedShop(db);
+
+    const sync = await request(app).post('/api/products/sync');
+
+    expect(sync.status).toBe(200);
+    expect(sync.body.syncedCount).toBe(1);
+    expect(callCount).toBe(2);
+  });
+
+  it('POST /api/products/sync surfaces a clear 502 (not a crash) when the Admin API call fails', async () => {
+    const shopify = createFakeShopify({
+      graphqlHandler: async () => {
+        throw new Error('permission denied for this shop');
+      },
     });
     const { app, db } = buildTestApp({ shopify });
     await seedShop(db);
